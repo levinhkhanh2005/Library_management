@@ -202,7 +202,8 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                 btnDelete.setEnabled(false);
                 return;
             }
-            String statusText = (String) tableModel.getValueAt(row, 8);
+            int modelRow = table.convertRowIndexToModel(row);
+            String statusText = (String) tableModel.getValueAt(modelRow, 8);
             boolean isActive  = !statusText.equals(Borrow.Status.RETURNED.getLabel());
             btnReturn.setEnabled(isActive);
             btnDelete.setEnabled(true);
@@ -274,6 +275,8 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                     statusLabel.setText(String.format(
                         "Tổng: %d phiếu  |  Đang mượn: %d  |  Quá hạn: %d",
                         list.size(), active, overdue));
+                    btnReturn.setEnabled(false);
+                    btnDelete.setEnabled(false);
                 } catch (Exception ex) {
                     UITheme.showError(BorrowPanel.this, "Lỗi tải dữ liệu:\n" + ex.getMessage());
                 }
@@ -286,15 +289,23 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
     private int getSelectedBorrowId() {
         int row = table.getSelectedRow();
         if (row < 0) return -1;
-        return (Integer) tableModel.getValueAt(row, 1);
+        int modelRow = table.convertRowIndexToModel(row);
+        Object val = tableModel.getValueAt(modelRow, 1);
+        if (val instanceof Number n) return n.intValue();
+        if (val != null) {
+            try { return Integer.parseInt(val.toString().trim()); }
+            catch (NumberFormatException ignored) {}
+        }
+        return -1;
     }
 
     private void openBorrowDialog() {
         BorrowDialog dlg = new BorrowDialog(
             (Frame) SwingUtilities.getWindowAncestor(this));
         dlg.setVisible(true);
-        if (dlg.isSaved()) loadData(
-            (String) filterStatus.getSelectedItem(), searchField.getText());
+        if (dlg.isSaved()) {
+            loadData((String) filterStatus.getSelectedItem(), searchField.getText());
+        }
     }
 
     private void returnSelected() {
@@ -302,9 +313,10 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         if (borrowId < 0) { UITheme.showWarning(this, "Vui lòng chọn một phiếu mượn."); return; }
 
         int row = table.getSelectedRow();
-        String bookTitle  = (String) tableModel.getValueAt(row, 2);
-        String readerName = (String) tableModel.getValueAt(row, 3);
-        String dueDate    = (String) tableModel.getValueAt(row, 6);
+        int modelRow = table.convertRowIndexToModel(row);
+        String bookTitle  = (String) tableModel.getValueAt(modelRow, 2);
+        String readerName = (String) tableModel.getValueAt(modelRow, 3);
+        String dueDate    = (String) tableModel.getValueAt(modelRow, 6);
 
         // Tính tiền phạt trước
         double fine = borrowService.calculateCurrentFine(dueDate);
@@ -338,14 +350,15 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         if (borrowId < 0) { UITheme.showWarning(this, "Vui lòng chọn một phiếu."); return; }
 
         int row = table.getSelectedRow();
-        String statusTxt = (String) tableModel.getValueAt(row, 8);
+        int modelRow = table.convertRowIndexToModel(row);
+        String statusTxt = (String) tableModel.getValueAt(modelRow, 8);
+
+        String msg = "Xóa phiếu mượn #" + borrowId + "?";
         if (!statusTxt.equals(Borrow.Status.RETURNED.getLabel())) {
-            UITheme.showWarning(this, "Chỉ có thể xóa phiếu đã trả sách.\nVui lòng ghi nhận trả trước.");
-            return;
+            msg += "\n⚠ Phiếu này chưa trả sách. Xóa phiếu sẽ tự động hoàn trả +1 bản sách vào kho.";
         }
 
-        boolean confirm = UITheme.showConfirm(this,
-            "Xóa phiếu mượn #" + borrowId + "?", "Xác nhận xóa");
+        boolean confirm = UITheme.showConfirm(this, msg, "Xác nhận xóa phiếu");
         if (!confirm) return;
         try {
             borrowService.deleteBorrow(borrowId);
