@@ -144,6 +144,36 @@ public class BorrowService {
         borrow.setFineAmount(fine);
         return borrow;
     }
+    // ===================== Xóa phiếu mượn =====================
+    /**
+     * Xóa phiếu mượn khỏi cơ sở dữ liệu.
+     * Nếu phiếu mượn chưa được trả, tự động cập nhật lại số lượng sách sẵn có (+1).
+     *
+     * @param borrowId ID phiếu mượn cần xóa
+     */
+    public void deleteBorrow(int borrowId) throws SQLException {
+        Borrow borrow = borrowDAO.findById(borrowId);
+        if (borrow == null) {
+            throw new IllegalArgumentException("Phiếu mượn không tồn tại.");
+        }
+        Connection conn = DatabaseConnection.getInstance().getConnection();
+        boolean autoCommit = conn.getAutoCommit();
+        try {
+            conn.setAutoCommit(false);
+            if (!borrowDAO.delete(borrowId)) {
+                throw new SQLException("Xóa phiếu mượn thất bại.");
+            }
+            if (!borrow.isReturned()) {
+                bookDAO.updateAvailableCopies(borrow.getBookId(), +1);
+            }
+            conn.commit();
+        } catch (Exception e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(autoCommit);
+        }
+    }
 
     // ===================== Đồng bộ trạng thái quá hạn =====================
 

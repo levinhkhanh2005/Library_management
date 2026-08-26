@@ -348,6 +348,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             "Xóa phiếu mượn #" + borrowId + "?", "Xác nhận xóa");
         if (!confirm) return;
         try {
+            borrowService.deleteBorrow(borrowId);
             UITheme.showSuccess(this, "Đã xóa phiếu mượn #" + borrowId + ".");
             loadData((String) filterStatus.getSelectedItem(), searchField.getText());
         } catch (Exception ex) {
