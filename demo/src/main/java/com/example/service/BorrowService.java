@@ -28,6 +28,12 @@ public class BorrowService {
     /** Số ngày mượn mặc định. */
     public static final int DEFAULT_BORROW_DAYS = 14;
 
+    /** Số lần gia hạn tối đa cho mỗi phiếu mượn. */
+    public static final int MAX_RENEW_COUNT = 2;
+
+    /** Số ngày gia hạn mặc định. */
+    public static final int DEFAULT_RENEW_DAYS = 7;
+
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final BorrowDAO  borrowDAO  = new BorrowDAO();
@@ -144,6 +150,71 @@ public class BorrowService {
         borrow.setFineAmount(fine);
         return borrow;
     }
+
+    // ===================== Gia hạn mượn sách =====================
+
+    /**
+     * Gia hạn thời gian mượn sách thêm số ngày chỉ định.
+     * Kiểm tra: phiếu mượn tồn tại, chưa trả sách, chưa vượt quá số lần gia hạn tối đa.
+     *
+     * @param borrowId  ID phiếu mượn cần gia hạn
+     * @param extraDays Số ngày gia hạn thêm (phải > 0)
+     * @return Borrow đã được cập nhật hạn trả và số lần gia hạn
+     */
+    public Borrow renewBorrow(int borrowId, int extraDays) throws SQLException {
+        if (extraDays <= 0) {
+            throw new IllegalArgumentException("Số ngày gia hạn phải lớn hơn 0.");
+        }
+
+        Borrow borrow = borrowDAO.findById(borrowId);
+        if (borrow == null) {
+            throw new IllegalArgumentException("Phiếu mượn không tồn tại.");
+        }
+        if (borrow.isReturned()) {
+            throw new IllegalStateException("Không thể gia hạn phiếu đã trả sách.");
+        }
+        if (borrow.getRenewCount() >= MAX_RENEW_COUNT) {
+            throw new IllegalStateException(
+                "Phiếu mượn đã đạt giới hạn số lần gia hạn tối đa (" + MAX_RENEW_COUNT + " lần).");
+        }
+
+        // Tính hạn trả mới
+        LocalDate currentDue;
+        try {
+            currentDue = LocalDate.parse(borrow.getDueDate(), DATE_FMT);
+        } catch (Exception e) {
+            currentDue = LocalDate.now();
+        }
+
+        // Nếu phiếu đã quá hạn, hạn mới tính từ ngày hôm nay; nếu còn hạn thì cộng dồn từ hạn cũ
+        LocalDate baseDate = (borrow.getStatus() == Borrow.Status.OVERDUE || currentDue.isBefore(LocalDate.now()))
+                ? LocalDate.now()
+                : currentDue;
+        LocalDate newDue = baseDate.plusDays(extraDays);
+        String newDueDateStr = newDue.format(DATE_FMT);
+
+        int newRenewCount = borrow.getRenewCount() + 1;
+        Borrow.Status newStatus = Borrow.Status.BORROWING; // Chuyển về đang mượn sau khi gia hạn
+
+        boolean ok = borrowDAO.renewBorrow(borrowId, newDueDateStr, newRenewCount, newStatus);
+        if (!ok) {
+            throw new SQLException("Gia hạn phiếu mượn thất bại trong CSDL.");
+        }
+
+        borrow.setDueDate(newDueDateStr);
+        borrow.setRenewCount(newRenewCount);
+        borrow.setStatus(newStatus);
+        borrow.setFineAmount(0.0);
+        return borrow;
+    }
+
+    /**
+     * Gia hạn thời gian mượn sách với số ngày mặc định (DEFAULT_RENEW_DAYS).
+     */
+    public Borrow renewBorrow(int borrowId) throws SQLException {
+        return renewBorrow(borrowId, DEFAULT_RENEW_DAYS);
+    }
+
     // ===================== Xóa phiếu mượn =====================
     /**
      * Xóa phiếu mượn khỏi cơ sở dữ liệu.

@@ -33,8 +33,8 @@ public class BorrowDAO {
      */
     public int insert(Borrow borrow) throws SQLException {
         String sql = """
-                INSERT INTO borrows (book_id, reader_id, borrow_date, due_date, status, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO borrows (book_id, reader_id, borrow_date, due_date, status, notes, renew_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement ps = getConn().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt   (1, borrow.getBookId());
@@ -43,6 +43,7 @@ public class BorrowDAO {
             ps.setString(4, borrow.getDueDate());
             ps.setString(5, borrow.getStatus().name());
             ps.setString(6, borrow.getNotes());
+            ps.setInt   (7, borrow.getRenewCount());
             ps.executeUpdate();
 
             ResultSet keys = ps.getGeneratedKeys();
@@ -65,6 +66,23 @@ public class BorrowDAO {
             ps.setString(1, returnDate);
             ps.setString(2, status.name());
             ps.setDouble(3, fineAmount);
+            ps.setInt   (4, borrowId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Gia hạn phiếu mượn: cập nhật hạn trả mới, số lần gia hạn và trạng thái.
+     */
+    public boolean renewBorrow(int borrowId, String newDueDate, int renewCount, Borrow.Status status) throws SQLException {
+        String sql = """
+                UPDATE borrows SET due_date = ?, renew_count = ?, status = ?
+                WHERE id = ?
+                """;
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, newDueDate);
+            ps.setInt   (2, renewCount);
+            ps.setString(3, status.name());
             ps.setInt   (4, borrowId);
             return ps.executeUpdate() > 0;
         }
@@ -286,6 +304,7 @@ public class BorrowDAO {
             rs.getDouble("fine_amount"),
             rs.getString("notes")
         );
+        try { b.setRenewCount (rs.getInt("renew_count"));    } catch (SQLException ignored) {}
         // Gán các trường join để hiển thị
         try { b.setBookTitle  (rs.getString("book_title"));  } catch (SQLException ignored) {}
         try { b.setBookIsbn   (rs.getString("book_isbn"));   } catch (SQLException ignored) {}
