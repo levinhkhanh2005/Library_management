@@ -2,7 +2,12 @@
 
 <!-- What does this PR do and why? Link any related issue: Closes #123 -->
 
-Add **Borrow Renewal** feature that allows librarians to extend a borrowing period by N days, with a configurable maximum renewal count (default: 2 times). The new due date is calculated from today (if overdue) or from the current due date. The `renew_count` field is persisted directly in the database and displayed in the UI.
+Implemented key library management enhancements:
+1. **Borrow Renewal**: Allows librarians to extend a borrowing period by N days with a configurable maximum renewal count (default: 2 times). The `renew_count` field is persisted directly in the database and tracked in the UI.
+2. **Max Concurrent Borrow Limit**: Restricts each reader to borrowing a maximum of N books simultaneously (default: 5 books). Validates active borrow count prior to creating new borrow records.
+3. **Advanced Multi-Criteria Search & Filtering**:
+   - **Books**: Filter by keyword, category, publication year, and availability status.
+   - **Borrows**: Filter by keyword, borrow date range (`dd/MM/yyyy`), and status (Borrowing, Overdue, Returned).
 
 ## Type of change
 
@@ -18,19 +23,23 @@ Add **Borrow Renewal** feature that allows librarians to extend a borrowing peri
 <!-- Bullet the notable changes. Mention any new modules, endpoints, or domain types. -->
 
 - **`Borrow.java`** — Added `renewCount` field, full constructor, getter/setter, and `canRenew(maxRenewCount)` helper method.
-- **`DatabaseInitializer.java`** — Added `renew_count INTEGER DEFAULT 0` column to the `borrows` DDL; added automatic migration (`ALTER TABLE borrows ADD COLUMN renew_count ...`) on application startup.
-- **`BorrowDAO.java`** — Updated `insert` and `mapRow` to handle `renew_count`; added `renewBorrow(borrowId, newDueDate, renewCount, status)` method.
-- **`BorrowService.java`** — Added constants `MAX_RENEW_COUNT = 2` and `DEFAULT_RENEW_DAYS = 7`; added two `renewBorrow` overloads with full validation (already-returned check, renewal limit check, new due date calculation).
-- **`BorrowPanel.java`** — Added **"Gia Hạn"** column showing `x/2` in the table; added **"⏳ Gia Hạn"** button on the toolbar; built a renewal dialog with a day spinner (1–60) and quick-select buttons (+7 / +14).
-- **`BorrowRenewTest.java`** *(new)* — Unit tests covering: successful renewal, count increment, exceeding limit, already-returned borrow, and overdue borrow.
-- **`data/library.db`**, **`demo/data/library.db`** — Schema updated directly: `renew_count` column added to the `borrows` table.
+- **`DatabaseInitializer.java`** — Added `renew_count INTEGER DEFAULT 0` column to `borrows` DDL; added automatic migration (`ALTER TABLE borrows ADD COLUMN renew_count ...`) on application startup.
+- **`BorrowDAO.java`** — Added support for `renew_count`, `renewBorrow(...)`, `countActiveBorrowsByReader(...)`, and `advancedSearch(...)` with SQL date range comparison using `SUBSTR`.
+- **`BorrowService.java`** — Added constants `MAX_RENEW_COUNT = 2` and `MAX_CONCURRENT_BORROWS = 5`; implemented validation logic in `borrowBook(...)` and `advancedSearchBorrows(...)`.
+- **`BorrowPanel.java`** — Added **"Gia Hạn"** column showing `x/2`, **"⏳ Gia Hạn"** button with renewal modal dialog, and **"🔍 Lọc Nâng Cao"** button with date-range and status filter dialog.
+- **`BookDAO.java` & `BookService.java`** — Added `advancedSearch(...)` supporting combined keyword, category, publication year, and availability status filters.
+- **`BookPanel.java`** — Added **"🔍 Lọc Nâng Cao"** button and modal dialog for multi-criteria book filtering.
+- **`BorrowRenewTest.java`** — Unit tests covering borrow renewal logic, renewal limit enforcement, and return status checks.
+- **`data/library.db`**, **`demo/data/library.db`** — Database schema updated directly with `renew_count` column added to `borrows` table.
 
 ## Screenshots / recordings
 
 <!-- For UI changes, drop before/after screenshots or a short clip. Delete if N/A. -->
-
-> Select a borrow record → click **⏳ Gia Hạn** → choose number of days → Confirm.
-> The "Gia Hạn" column updates immediately after a successful renewal (e.g. `1/2`).
+![img.png](img.png)
+![img_1.png](img_1.png)
+> - Select a borrow record → click **⏳ Gia Hạn** to extend due date (updates column to `1/2`).
+> - Click **🔍 Lọc Nâng Cao** on Books or Borrows panel to apply multi-criteria search filters.
+> - Attempting to borrow > 5 books for a single reader triggers concurrent limit validation error.
 
 ## How to test
 
@@ -38,11 +47,16 @@ Add **Borrow Renewal** feature that allows librarians to extend a borrowing peri
 
 1. Run the application: `java -jar demo/target/QLThuVienNguyenHue.jar`
 2. Log in as a **librarian** or **admin** account.
-3. Navigate to the **Mượn / Trả Sách** tab — verify the **"Gia Hạn"** column shows `0/2` for existing records.
-4. Select a record with status **Đang mượn** or **Quá hạn** → click **⏳ Gia Hạn**.
-5. In the dialog, choose the number of days (default 7) → click **Xác Nhận Gia Hạn**.
-6. Verify the "Gia Hạn" column increments to `1/2` and the "Hạn Trả" column shows the new due date.
-7. Renew the same record again → column should show `2/2`.
-8. Attempt a third renewal → app should show an error: renewal limit reached.
-9. Attempt to renew an already-returned record → app should reject with an error.
-10. Run unit tests: `mvn test -Dtest=BorrowRenewTest` — all 5 tests must PASS.
+3. **Test Borrow Renewal**:
+   - Navigate to **Mượn / Trả Sách** tab → select an active record → click **⏳ Gia Hạn**.
+   - Verify renewal increments count (`1/2`) and extends due date. Exceeding 2 renewals displays an error limit reached.
+4. **Test Max Concurrent Borrow Limit**:
+   - Create new borrows for a reader who currently has 5 active borrows.
+   - Verify system prevents borrowing a 6th book and displays a warning that max borrow limit (5 books) is reached.
+5. **Test Advanced Search (Books)**:
+   - Go to **Quản Lý Sách** → click **🔍 Lọc Nâng Cao**.
+   - Filter by Category, Publish Year, and Availability status → click **Lọc Kết Quả** to verify correct results.
+6. **Test Advanced Search (Borrows)**:
+   - Go to **Mượn / Trả Sách** → click **🔍 Lọc Nâng Cao**.
+   - Filter by Date Range (`dd/MM/yyyy`) and Status (Đang mượn / Quá hạn / Đã trả) → verify filtered records.
+7. Run unit tests: `mvn test -Dtest=BorrowRenewTest` — all 5 tests must PASS.

@@ -204,6 +204,46 @@ public class BorrowDAO {
         }
     }
 
+    /** Tìm kiếm nâng cao kết hợp nhiều tiêu chí. */
+    public List<Borrow> advancedSearch(String keyword, String fromDate, String toDate, Borrow.Status status) throws SQLException {
+        StringBuilder sql = new StringBuilder(SELECT_WITH_JOIN);
+        sql.append(" WHERE 1=1 ");
+        List<Object> params = new ArrayList<>();
+
+        if (keyword != null && !keyword.isBlank()) {
+            sql.append(" AND (bk.title LIKE ? OR r.full_name LIKE ? OR r.reader_code LIKE ? OR bk.isbn LIKE ?) ");
+            String like = "%" + keyword.trim() + "%";
+            params.add(like);
+            params.add(like);
+            params.add(like);
+            params.add(like);
+        }
+
+        if (status != null) {
+            sql.append(" AND b.status = ? ");
+            params.add(status.name());
+        }
+
+        if (fromDate != null && !fromDate.isBlank()) {
+            sql.append(" AND SUBSTR(b.borrow_date,7,4)||SUBSTR(b.borrow_date,4,2)||SUBSTR(b.borrow_date,1,2) >= SUBSTR(?,7,4)||SUBSTR(?,4,2)||SUBSTR(?,1,2) ");
+            params.add(fromDate);
+        }
+
+        if (toDate != null && !toDate.isBlank()) {
+            sql.append(" AND SUBSTR(b.borrow_date,7,4)||SUBSTR(b.borrow_date,4,2)||SUBSTR(b.borrow_date,1,2) <= SUBSTR(?,7,4)||SUBSTR(?,4,2)||SUBSTR(?,1,2) ");
+            params.add(toDate);
+        }
+
+        sql.append(" ORDER BY b.id DESC ");
+
+        try (PreparedStatement ps = getConn().prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            return mapList(ps.executeQuery());
+        }
+    }
+
     /** Kiểm tra độc giả có đang mượn sách cụ thể không. */
     public boolean isBookBorrowedByReader(int bookId, int readerId) throws SQLException {
         String sql = """

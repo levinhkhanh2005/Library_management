@@ -34,6 +34,9 @@ public class BorrowService {
     /** Số ngày gia hạn mặc định. */
     public static final int DEFAULT_RENEW_DAYS = 7;
 
+    /** Số lượng sách mượn tối đa cùng lúc. */
+    public static final int MAX_CONCURRENT_BORROWS = 5;
+
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final BorrowDAO  borrowDAO  = new BorrowDAO();
@@ -44,7 +47,7 @@ public class BorrowService {
 
     /**
      * Tạo phiếu mượn sách.
-     * Kiểm tra: sách còn bản, độc giả hoạt động, chưa mượn cuốn đó.
+     * Kiểm tra: sách còn bản, độc giả hoạt động, chưa vượt giới hạn mượn, chưa mượn cuốn đó.
      *
      * @param bookId    ID sách cần mượn
      * @param readerId  ID độc giả
@@ -67,7 +70,17 @@ public class BorrowService {
         if (!reader.canBorrow())   throw new IllegalStateException(
             "Tài khoản độc giả \"" + reader.getFullName() + "\" đang bị khóa hoặc hết hạn.");
 
-        // 3. Kiểm tra chưa mượn cuốn đó
+        // 3. Kiểm tra số sách đang mượn chưa vượt quá giới hạn
+        long activeBorrowsCount = borrowDAO.findByReader(readerId).stream()
+                .filter(Borrow::isActive)
+                .count();
+        if (activeBorrowsCount >= MAX_CONCURRENT_BORROWS) {
+            throw new IllegalStateException(
+                "Độc giả \"" + reader.getFullName() + "\" đã đạt giới hạn mượn " +
+                MAX_CONCURRENT_BORROWS + " cuốn sách cùng lúc.");
+        }
+
+        // 4. Kiểm tra chưa mượn cuốn đó
         if (borrowDAO.isBookBorrowedByReader(bookId, readerId)) {
             throw new IllegalStateException(
                 "Độc giả \"" + reader.getFullName() +
@@ -277,6 +290,10 @@ public class BorrowService {
 
     public List<Borrow> searchBorrows(String keyword) throws SQLException {
         return borrowDAO.search(keyword);
+    }
+
+    public List<Borrow> advancedSearchBorrows(String keyword, String fromDate, String toDate, Borrow.Status status) throws SQLException {
+        return borrowDAO.advancedSearch(keyword, fromDate, toDate, status);
     }
 
     public int getActiveBorrowCount() throws SQLException {

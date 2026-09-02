@@ -24,7 +24,6 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
     private JTable            table;
     private DefaultTableModel tableModel;
     private JTextField        searchField;
-    private JComboBox<String> filterStatus;
     private JLabel            statusLabel;
     private JButton           btnReturn, btnRenew, btnDelete;
 
@@ -97,24 +96,17 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         JPanel rightGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         rightGroup.setOpaque(false);
 
-        JLabel filterLbl = new JLabel("Lọc:");
-        filterLbl.setFont(UITheme.FONT_BOLD);
-        filterLbl.setForeground(UITheme.TEXT_SECONDARY);
-
-        filterStatus = new JComboBox<>(FILTER_OPTIONS);
-        filterStatus.setFont(UITheme.FONT_BODY);
-        filterStatus.setPreferredSize(new Dimension(130, UITheme.INPUT_HEIGHT));
-
         searchField = UITheme.createSearchField();
         searchField.setPreferredSize(new Dimension(220, UITheme.INPUT_HEIGHT));
 
         JButton btnSearch = UITheme.createPrimaryButton("Tìm");
         btnSearch.setPreferredSize(new Dimension(70, UITheme.INPUT_HEIGHT));
 
-        rightGroup.add(filterLbl);
-        rightGroup.add(filterStatus);
+        JButton btnAdvancedFilter = UITheme.createSecondaryButton("🔍 Lọc Nâng Cao");
+
         rightGroup.add(searchField);
         rightGroup.add(btnSearch);
+        rightGroup.add(btnAdvancedFilter);
         toolbar.add(rightGroup, BorderLayout.EAST);
 
         // Sự kiện
@@ -124,15 +116,13 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         btnDelete.addActionListener(e -> deleteSelected());
         btnRefresh.addActionListener(e -> {
             searchField.setText("");
-            filterStatus.setSelectedIndex(0);
             loadData("Tất cả", null);
         });
-        filterStatus.addActionListener(e ->
-            loadData((String) filterStatus.getSelectedItem(), searchField.getText()));
         btnSearch.addActionListener(e ->
-            loadData((String) filterStatus.getSelectedItem(), searchField.getText()));
+            loadData("Tất cả", searchField.getText()));
         searchField.addActionListener(e ->
-            loadData((String) filterStatus.getSelectedItem(), searchField.getText()));
+            loadData("Tất cả", searchField.getText()));
+        btnAdvancedFilter.addActionListener(e -> openAdvancedFilterDialog());
 
         return toolbar;
     }
@@ -256,42 +246,59 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                 };
             }
             @Override protected void done() {
-                try {
-                    List<Borrow> list = get();
-                    tableModel.setRowCount(0);
-                    int idx = 1;
-                    for (Borrow b : list) {
-                        String fine = b.getFineAmount() > 0
-                            ? UITheme.formatCurrency(b.getFineAmount()) : "—";
-                        String renewDisplay = b.getRenewCount() + "/" + BorrowService.MAX_RENEW_COUNT;
-                        tableModel.addRow(new Object[]{
-                            idx++,
-                            b.getId(),
-                            b.getBookTitle(),
-                            b.getReaderName(),
-                            b.getReaderCode(),
-                            b.getBorrowDate(),
-                            b.getDueDate(),
-                            renewDisplay,
-                            b.getReturnDate() != null ? b.getReturnDate() : "—",
-                            b.getStatus().getLabel(),
-                            fine
-                        });
-                    }
-                    long active  = list.stream().filter(Borrow::isActive).count();
-                    long overdue = list.stream().filter(b -> b.getStatus() == Borrow.Status.OVERDUE).count();
-                    statusLabel.setText(String.format(
-                        "Tổng: %d phiếu  |  Đang mượn: %d  |  Quá hạn: %d",
-                        list.size(), active, overdue));
-                    btnReturn.setEnabled(false);
-                    btnRenew.setEnabled(false);
-                    btnDelete.setEnabled(false);
-                } catch (Exception ex) {
-                    UITheme.showError(BorrowPanel.this, "Lỗi tải dữ liệu:\n" + ex.getMessage());
-                }
+                updateTableData(this);
             }
         };
         worker.execute();
+    }
+
+    private void loadAdvancedData(String keyword, String fromDate, String toDate, Borrow.Status status) {
+        statusLabel.setText("Đang tải (Lọc nâng cao)...");
+        SwingWorker<List<Borrow>, Void> worker = new SwingWorker<>() {
+            @Override protected List<Borrow> doInBackground() throws Exception {
+                return borrowService.advancedSearchBorrows(keyword, fromDate, toDate, status);
+            }
+            @Override protected void done() {
+                updateTableData(this);
+            }
+        };
+        worker.execute();
+    }
+
+    private void updateTableData(SwingWorker<List<Borrow>, Void> worker) {
+        try {
+            List<Borrow> list = worker.get();
+            tableModel.setRowCount(0);
+            int idx = 1;
+            for (Borrow b : list) {
+                String fine = b.getFineAmount() > 0
+                    ? UITheme.formatCurrency(b.getFineAmount()) : "—";
+                String renewDisplay = b.getRenewCount() + "/" + BorrowService.MAX_RENEW_COUNT;
+                tableModel.addRow(new Object[]{
+                    idx++,
+                    b.getId(),
+                    b.getBookTitle(),
+                    b.getReaderName(),
+                    b.getReaderCode(),
+                    b.getBorrowDate(),
+                    b.getDueDate(),
+                    renewDisplay,
+                    b.getReturnDate() != null ? b.getReturnDate() : "—",
+                    b.getStatus().getLabel(),
+                    fine
+                });
+            }
+            long active  = list.stream().filter(Borrow::isActive).count();
+            long overdue = list.stream().filter(b -> b.getStatus() == Borrow.Status.OVERDUE).count();
+            statusLabel.setText(String.format(
+                "Tổng: %d phiếu  |  Đang mượn: %d  |  Quá hạn: %d",
+                list.size(), active, overdue));
+            btnReturn.setEnabled(false);
+            btnRenew.setEnabled(false);
+            btnDelete.setEnabled(false);
+        } catch (Exception ex) {
+            UITheme.showError(BorrowPanel.this, "Lỗi tải dữ liệu:\n" + ex.getMessage());
+        }
     }
 
     /** Lấy borrowId từ dòng đang chọn. */
@@ -313,7 +320,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             (Frame) SwingUtilities.getWindowAncestor(this));
         dlg.setVisible(true);
         if (dlg.isSaved()) {
-            loadData((String) filterStatus.getSelectedItem(), searchField.getText());
+            loadData("Tất cả", searchField.getText());
         }
     }
 
@@ -403,7 +410,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                     "Gia hạn phiếu mượn #" + borrowId + " thành công!\n"
                     + "📅 Hạn trả mới: " + updated.getDueDate() + "\n"
                     + "🔄 Số lần gia hạn: " + updated.getRenewCount() + "/" + BorrowService.MAX_RENEW_COUNT);
-                loadData((String) filterStatus.getSelectedItem(), searchField.getText());
+                loadData("Tất cả", searchField.getText());
             } catch (Exception ex) {
                 UITheme.showError(renewDialog, ex.getMessage());
             }
@@ -448,7 +455,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                 msg += "\n💰 Tiền phạt: " + UITheme.formatCurrency(updated.getFineAmount());
             }
             UITheme.showSuccess(this, msg);
-            loadData((String) filterStatus.getSelectedItem(), searchField.getText());
+            loadData("Tất cả", searchField.getText());
         } catch (Exception ex) {
             UITheme.showError(this, ex.getMessage());
         }
@@ -472,15 +479,91 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         try {
             borrowService.deleteBorrow(borrowId);
             UITheme.showSuccess(this, "Đã xóa phiếu mượn #" + borrowId + ".");
-            loadData((String) filterStatus.getSelectedItem(), searchField.getText());
+            loadData("Tất cả", searchField.getText());
         } catch (Exception ex) {
             UITheme.showError(this, ex.getMessage());
         }
     }
 
+    private void openAdvancedFilterDialog() {
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Lọc Phiếu Mượn", true);
+        dialog.setLayout(new BorderLayout());
+        dialog.setSize(400, 320);
+        dialog.setLocationRelativeTo(this);
+        dialog.setResizable(false);
+
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBorder(new EmptyBorder(16, 20, 16, 20));
+        content.setBackground(UITheme.BG_WHITE);
+
+        // Keyword
+        JPanel pnlKeyword = new JPanel(new BorderLayout(5, 5));
+        pnlKeyword.setOpaque(false);
+        pnlKeyword.add(new JLabel("Từ khóa:"), BorderLayout.WEST);
+        JTextField txtKeyword = UITheme.createTextField("");
+        txtKeyword.setText(searchField.getText());
+        pnlKeyword.add(txtKeyword, BorderLayout.CENTER);
+
+        // Status
+        JPanel pnlStatus = new JPanel(new BorderLayout(5, 5));
+        pnlStatus.setOpaque(false);
+        pnlStatus.add(new JLabel("Trạng thái:"), BorderLayout.WEST);
+        JComboBox<String> cbStatus = new JComboBox<>(FILTER_OPTIONS);
+        pnlStatus.add(cbStatus, BorderLayout.CENTER);
+
+        // Date Range
+        JPanel pnlFromDate = new JPanel(new BorderLayout(5, 5));
+        pnlFromDate.setOpaque(false);
+        pnlFromDate.add(new JLabel("Từ ngày (dd/MM/yyyy):"), BorderLayout.WEST);
+        JTextField txtFromDate = UITheme.createTextField("dd/MM/yyyy");
+        pnlFromDate.add(txtFromDate, BorderLayout.CENTER);
+
+        JPanel pnlToDate = new JPanel(new BorderLayout(5, 5));
+        pnlToDate.setOpaque(false);
+        pnlToDate.add(new JLabel("Đến ngày (dd/MM/yyyy):"), BorderLayout.WEST);
+        JTextField txtToDate = UITheme.createTextField("dd/MM/yyyy");
+        pnlToDate.add(txtToDate, BorderLayout.CENTER);
+
+        content.add(pnlKeyword);
+        content.add(Box.createVerticalStrut(10));
+        content.add(pnlStatus);
+        content.add(Box.createVerticalStrut(10));
+        content.add(pnlFromDate);
+        content.add(Box.createVerticalStrut(10));
+        content.add(pnlToDate);
+
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        actionPanel.setBackground(UITheme.BG_WHITE);
+        JButton btnCancel = UITheme.createSecondaryButton("Hủy");
+        JButton btnFilter = UITheme.createPrimaryButton("Lọc Kết Quả");
+
+        btnCancel.addActionListener(e -> dialog.dispose());
+        btnFilter.addActionListener(e -> {
+            String kw = txtKeyword.getText();
+            String selStatus = (String) cbStatus.getSelectedItem();
+            Borrow.Status status = null;
+            if ("Đang mượn".equals(selStatus)) status = Borrow.Status.BORROWING;
+            else if ("Quá hạn".equals(selStatus)) status = Borrow.Status.OVERDUE;
+            else if ("Đã trả".equals(selStatus)) status = Borrow.Status.RETURNED;
+
+            String fromD = txtFromDate.getText().trim();
+            String toD = txtToDate.getText().trim();
+
+            dialog.dispose();
+            searchField.setText(kw);
+            loadAdvancedData(kw, fromD, toD, status);
+        });
+
+        actionPanel.add(btnCancel);
+        actionPanel.add(btnFilter);
+
+        dialog.add(content, BorderLayout.CENTER);
+        dialog.add(actionPanel, BorderLayout.SOUTH);
+        dialog.setVisible(true);
+    }
+
     @Override public void refresh() {
-        loadData(filterStatus != null
-            ? (String) filterStatus.getSelectedItem() : "Tất cả",
-            searchField != null ? searchField.getText() : null);
+        loadData("Tất cả", searchField != null ? searchField.getText() : null);
     }
 }
