@@ -212,9 +212,21 @@ public class BorrowDialog extends JDialog {
         readerList.addListSelectionListener(e -> {
             selectedReader = readerList.getSelectedValue();
             if (selectedReader != null) {
+                // Truy vấn số sách đang mượn để hiển thị hạn mức
+                int activeCount = 0;
+                try {
+                    activeCount = new BorrowService().getActiveCountByReader(selectedReader.getId());
+                } catch (Exception ignored) {}
+                int max = BorrowService.MAX_ACTIVE_BORROWS_PER_READER;
+                String countColor = activeCount >= max ? "#EF4444" : "#10B981";
+                String countText  = activeCount >= max
+                    ? "Đang giữ: <font color='" + countColor + "'><b>" + activeCount + "/" + max + " cuốn (Đã đạt hạn mức!)</b></font>"
+                    : "Đang giữ: <font color='" + countColor + "'>" + activeCount + "/" + max + " cuốn</font>";
+
                 lblReaderInfo.setText("<html><b>" + selectedReader.getFullName() + "</b>"
                     + "  |  Mã thẻ: " + selectedReader.getReaderCode()
-                    + "  |  " + selectedReader.getPhone() + "</html>");
+                    + "  |  " + selectedReader.getPhone()
+                    + "  |  " + countText + "</html>");
             }
         });
 

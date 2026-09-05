@@ -9,7 +9,8 @@ public class Borrow {
     public enum Status {
         BORROWING("Đang mượn"),
         RETURNED("Đã trả"),
-        OVERDUE("Quá hạn");
+        OVERDUE("Quá hạn"),
+        LOST("Mất sách");
 
         private final String label;
 
@@ -146,6 +147,11 @@ public class Borrow {
     /** Kiểm tra đã trả sách chưa. */
     public boolean isReturned() {
         return status == Status.RETURNED;
+    }
+
+    /** Kiểm tra sách bị mất. */
+    public boolean isLost() {
+        return status == Status.LOST;
     }
 
     /** Kiểm tra xem phiếu có thể gia hạn hay không dựa trên số lần tối đa. */
