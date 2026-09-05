@@ -33,8 +33,8 @@ public class BorrowDAO {
      */
     public int insert(Borrow borrow) throws SQLException {
         String sql = """
-                INSERT INTO borrows (book_id, reader_id, borrow_date, due_date, status, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO borrows (book_id, reader_id, borrow_date, due_date, status, notes, renew_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement ps = getConn().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt   (1, borrow.getBookId());
@@ -43,6 +43,7 @@ public class BorrowDAO {
             ps.setString(4, borrow.getDueDate());
             ps.setString(5, borrow.getStatus().name());
             ps.setString(6, borrow.getNotes());
+            ps.setInt   (7, borrow.getRenewCount());
             ps.executeUpdate();
 
             ResultSet keys = ps.getGeneratedKeys();
@@ -65,6 +66,23 @@ public class BorrowDAO {
             ps.setString(1, returnDate);
             ps.setString(2, status.name());
             ps.setDouble(3, fineAmount);
+            ps.setInt   (4, borrowId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Gia hạn phiếu mượn: cập nhật hạn trả mới, số lần gia hạn và trạng thái.
+     */
+    public boolean renewBorrow(int borrowId, String newDueDate, int renewCount, Borrow.Status status) throws SQLException {
+        String sql = """
+                UPDATE borrows SET due_date = ?, renew_count = ?, status = ?
+                WHERE id = ?
+                """;
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, newDueDate);
+            ps.setInt   (2, renewCount);
+            ps.setString(3, status.name());
             ps.setInt   (4, borrowId);
             return ps.executeUpdate() > 0;
         }
@@ -186,6 +204,46 @@ public class BorrowDAO {
         }
     }
 
+    /** Tìm kiếm nâng cao kết hợp nhiều tiêu chí. */
+    public List<Borrow> advancedSearch(String keyword, String fromDate, String toDate, Borrow.Status status) throws SQLException {
+        StringBuilder sql = new StringBuilder(SELECT_WITH_JOIN);
+        sql.append(" WHERE 1=1 ");
+        List<Object> params = new ArrayList<>();
+
+        if (keyword != null && !keyword.isBlank()) {
+            sql.append(" AND (bk.title LIKE ? OR r.full_name LIKE ? OR r.reader_code LIKE ? OR bk.isbn LIKE ?) ");
+            String like = "%" + keyword.trim() + "%";
+            params.add(like);
+            params.add(like);
+            params.add(like);
+            params.add(like);
+        }
+
+        if (status != null) {
+            sql.append(" AND b.status = ? ");
+            params.add(status.name());
+        }
+
+        if (fromDate != null && !fromDate.isBlank()) {
+            sql.append(" AND SUBSTR(b.borrow_date,7,4)||SUBSTR(b.borrow_date,4,2)||SUBSTR(b.borrow_date,1,2) >= SUBSTR(?,7,4)||SUBSTR(?,4,2)||SUBSTR(?,1,2) ");
+            params.add(fromDate);
+        }
+
+        if (toDate != null && !toDate.isBlank()) {
+            sql.append(" AND SUBSTR(b.borrow_date,7,4)||SUBSTR(b.borrow_date,4,2)||SUBSTR(b.borrow_date,1,2) <= SUBSTR(?,7,4)||SUBSTR(?,4,2)||SUBSTR(?,1,2) ");
+            params.add(toDate);
+        }
+
+        sql.append(" ORDER BY b.id DESC ");
+
+        try (PreparedStatement ps = getConn().prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            return mapList(ps.executeQuery());
+        }
+    }
+
     /** Kiểm tra độc giả có đang mượn sách cụ thể không. */
     public boolean isBookBorrowedByReader(int bookId, int readerId) throws SQLException {
         String sql = """
@@ -286,6 +344,7 @@ public class BorrowDAO {
             rs.getDouble("fine_amount"),
             rs.getString("notes")
         );
+        try { b.setRenewCount (rs.getInt("renew_count"));    } catch (SQLException ignored) {}
         // Gán các trường join để hiển thị
         try { b.setBookTitle  (rs.getString("book_title"));  } catch (SQLException ignored) {}
         try { b.setBookIsbn   (rs.getString("book_isbn"));   } catch (SQLException ignored) {}

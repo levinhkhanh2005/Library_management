@@ -11,9 +11,23 @@ import java.sql.SQLException;
  */
 public class DatabaseConnection {
 
-    private static final String DB_FOLDER = "data";
-    private static final String DB_FILE   = "library.db";
-    private static final String DB_URL    = "jdbc:sqlite:" + DB_FOLDER + File.separator + DB_FILE;
+    private static String getDbUrl() {
+        File f1 = new File("data" + File.separator + "library.db");
+        File f2 = new File("demo" + File.separator + "data" + File.separator + "library.db");
+        File f3 = new File(".." + File.separator + "data" + File.separator + "library.db");
+
+        if (f1.exists()) {
+            return "jdbc:sqlite:" + f1.getAbsolutePath();
+        } else if (f2.exists()) {
+            return "jdbc:sqlite:" + f2.getAbsolutePath();
+        } else if (f3.exists()) {
+            return "jdbc:sqlite:" + f3.getAbsolutePath();
+        } else {
+            File dataDir = new File("data");
+            if (!dataDir.exists()) dataDir.mkdirs();
+            return "jdbc:sqlite:" + f1.getAbsolutePath();
+        }
+    }
 
     /** Instance duy nhất (Singleton). */
     private static DatabaseConnection instance;
@@ -40,18 +54,13 @@ public class DatabaseConnection {
      * Tự động tạo thư mục "data/" nếu chưa tồn tại.
      */
     public Connection getConnection() throws SQLException {
-        // Tạo thư mục data/ nếu chưa có
-        File dataDir = new File(DB_FOLDER);
-        if (!dataDir.exists()) {
-            dataDir.mkdirs();
-        }
-
         // Kiểm tra kết nối còn sống không
         if (connection == null || connection.isClosed()) {
             try {
                 // Load driver SQLite
                 Class.forName("org.sqlite.JDBC");
-                connection = DriverManager.getConnection(DB_URL);
+                String dbUrl = getDbUrl();
+                connection = DriverManager.getConnection(dbUrl);
 
                 // Autocommit phải = true trước khi chạy bất kỳ PRAGMA nào
                 connection.setAutoCommit(true);
@@ -63,7 +72,7 @@ public class DatabaseConnection {
                     st.execute("PRAGMA synchronous = NORMAL");
                 }
 
-                System.out.println("[DB] Đã kết nối SQLite: " + DB_URL);
+                System.out.println("[DB] Đã kết nối SQLite: " + dbUrl);
             } catch (ClassNotFoundException e) {
                 throw new SQLException("Không tìm thấy SQLite JDBC driver: " + e.getMessage());
             }
@@ -94,6 +103,6 @@ public class DatabaseConnection {
      * Lấy đường dẫn file database.
      */
     public static String getDatabasePath() {
-        return new File(DB_FOLDER + File.separator + DB_FILE).getAbsolutePath();
+        return getDbUrl().replace("jdbc:sqlite:", "");
     }
 }
