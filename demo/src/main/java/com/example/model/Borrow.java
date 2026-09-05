@@ -9,7 +9,8 @@ public class Borrow {
     public enum Status {
         BORROWING("Đang mượn"),
         RETURNED("Đã trả"),
-        OVERDUE("Quá hạn");
+        OVERDUE("Quá hạn"),
+        LOST("Mất sách");
 
         private final String label;
 
@@ -39,6 +40,7 @@ public class Borrow {
     private Status status;
     private double fineAmount;   // Tiền phạt (đồng)
     private String notes;
+    private int renewCount;      // Số lần đã gia hạn
 
     // Dữ liệu join (không lưu trong DB, dùng để hiển thị)
     private String bookTitle;
@@ -51,6 +53,7 @@ public class Borrow {
     public Borrow() {
         this.status = Status.BORROWING;
         this.fineAmount = 0.0;
+        this.renewCount = 0;
     }
 
     /** Constructor tạo phiếu mượn mới. */
@@ -63,6 +66,7 @@ public class Borrow {
         this.notes = notes;
         this.status = Status.BORROWING;
         this.fineAmount = 0.0;
+        this.renewCount = 0;
     }
 
     /** Constructor đầy đủ (đọc từ DB). */
@@ -109,6 +113,9 @@ public class Borrow {
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
 
+    public int getRenewCount() { return renewCount; }
+    public void setRenewCount(int renewCount) { this.renewCount = renewCount; }
+
     // Dữ liệu join (display only)
     public String getBookTitle() { return bookTitle; }
     public void setBookTitle(String bookTitle) { this.bookTitle = bookTitle; }
@@ -132,6 +139,16 @@ public class Borrow {
     /** Kiểm tra đã trả sách chưa. */
     public boolean isReturned() {
         return status == Status.RETURNED;
+    }
+
+    /** Kiểm tra sách bị mất. */
+    public boolean isLost() {
+        return status == Status.LOST;
+    }
+
+    /** Kiểm tra phiếu có thể gia hạn không (chỉ BORROWING, chưa vượt hạn mức). */
+    public boolean canRenew(int maxRenewCount) {
+        return status == Status.BORROWING && renewCount < maxRenewCount;
     }
 
     @Override

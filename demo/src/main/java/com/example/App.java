@@ -47,8 +47,8 @@ public class App {
 
             } catch (Exception e) {
                 JOptionPane.showMessageDialog(null,
-                    "Lỗi khởi động ứng dụng:\n" + e.getMessage(),
-                    "Lỗi nghiêm trọng", JOptionPane.ERROR_MESSAGE);
+                        "Lỗi khởi động ứng dụng:\n" + e.getMessage(),
+                        "Lỗi nghiêm trọng", JOptionPane.ERROR_MESSAGE);
                 System.exit(1);
             }
         });

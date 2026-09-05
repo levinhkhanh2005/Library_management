@@ -11,18 +11,3 @@
 - [ ] Documentation
 - [ ] Chore / tooling
 
-## Changes
-
-<!-- Bullet the notable changes. Mention any new modules, endpoints, or domain types. -->
-
--
-
-## Screenshots / recordings
-
-<!-- For UI changes, drop before/after screenshots or a short clip. Delete if N/A. -->
-
-## How to test
-
-<!-- Steps for a reviewer to verify locally. Note any env vars (e.g. VITE_API_BASE) or seed data needed. -->
-
-1.

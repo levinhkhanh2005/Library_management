@@ -103,6 +103,51 @@ public class BorrowDAO {
         }
     }
 
+    /**
+     * Đếm số phiếu mượn đang hoạt động của một độc giả (BORROWING + OVERDUE).
+     * Dùng để kiểm tra hạn mức mượn tối đa.
+     */
+    public int countActiveByReader(int readerId) throws SQLException {
+        String sql = """
+                SELECT COUNT(*) FROM borrows
+                WHERE reader_id = ? AND status IN ('BORROWING','OVERDUE')
+                """;
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, readerId);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? rs.getInt(1) : 0;
+        }
+    }
+
+    /**
+     * Gia hạn hạn trả: cập nhật due_date mới và ghi chú gia hạn.
+     */
+    public boolean renewDueDate(int borrowId, String newDueDate, String newNotes) throws SQLException {
+        String sql = "UPDATE borrows SET due_date = ?, notes = ? WHERE id = ?";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, newDueDate);
+            ps.setString(2, newNotes);
+            ps.setInt   (3, borrowId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Báo mất sách: cập nhật trạng thái LOST, tiền bồi thường và ghi chú.
+     */
+    public boolean reportLost(int borrowId, double compensationFee, String newNotes) throws SQLException {
+        String sql = """
+                UPDATE borrows SET status = 'LOST', fine_amount = ?, notes = ?
+                WHERE id = ?
+                """;
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setDouble(1, compensationFee);
+            ps.setString(2, newNotes);
+            ps.setInt   (3, borrowId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
     // ===================== Xóa phiếu mượn =====================
 
     public boolean delete(int id) throws SQLException {
@@ -147,6 +192,15 @@ public class BorrowDAO {
     /** Lấy danh sách quá hạn. */
     public List<Borrow> findOverdue() throws SQLException {
         String sql = SELECT_WITH_JOIN + " WHERE b.status = 'OVERDUE' ORDER BY b.due_date";
+        try (Statement stmt = getConn().createStatement();
+             ResultSet rs   = stmt.executeQuery(sql)) {
+            return mapList(rs);
+        }
+    }
+
+    /** Lấy danh sách phiếu mượn bị mất sách. */
+    public List<Borrow> findLost() throws SQLException {
+        String sql = SELECT_WITH_JOIN + " WHERE b.status = 'LOST' ORDER BY b.id DESC";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return mapList(rs);

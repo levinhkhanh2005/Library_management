@@ -82,6 +82,18 @@ public class BookDAO {
         }
     }
 
+    /**
+     * Giảm total_copies đi 1 khi sách bị báo mất.
+     * Lưu ý: available_copies không đổi vì bản này đã bị trừ khi mượn.
+     */
+    public boolean decreaseTotalCopies(int bookId) throws SQLException {
+        String sql = "UPDATE books SET total_copies = total_copies - 1 WHERE id = ? AND total_copies > 0";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, bookId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
     // ===================== Xóa sách =====================
 
     /**
