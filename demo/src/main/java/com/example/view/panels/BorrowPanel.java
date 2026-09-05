@@ -5,6 +5,7 @@ import com.example.service.BorrowService;
 import com.example.view.MainFrame;
 import com.example.view.UITheme;
 import com.example.view.dialogs.BorrowDialog;
+import com.example.view.dialogs.ReceiptPreviewDialog;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -25,7 +26,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
     private DefaultTableModel tableModel;
     private JTextField        searchField;
     private JLabel            statusLabel;
-    private JButton           btnReturn, btnRenew, btnDelete;
+    private JButton           btnReturn, btnRenew, btnDelete, btnExportPdf;
 
     private static final String[] COLUMNS = {
         "#", "Mã Phiếu", "Tên Sách", "Độc Giả", "Mã Thẻ",
@@ -78,16 +79,19 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         JButton btnNew    = UITheme.createPrimaryButton("＋  Tạo Phiếu Mượn");
         btnReturn         = UITheme.createSuccessButton("✓  Trả Sách");
         btnRenew          = UITheme.createSecondaryButton("⏳  Gia Hạn");
+        btnExportPdf      = UITheme.createSecondaryButton("📄  Xuất PDF");
         btnDelete         = UITheme.createDangerButton("✕  Xóa Phiếu");
         JButton btnRefresh= UITheme.createSecondaryButton("↺  Làm Mới");
 
         btnReturn.setEnabled(false);
         btnRenew.setEnabled(false);
+        btnExportPdf.setEnabled(false);
         btnDelete.setEnabled(false);
 
         leftGroup.add(btnNew);
         leftGroup.add(btnReturn);
         leftGroup.add(btnRenew);
+        leftGroup.add(btnExportPdf);
         leftGroup.add(btnDelete);
         leftGroup.add(btnRefresh);
         toolbar.add(leftGroup, BorderLayout.WEST);
@@ -113,6 +117,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         btnNew.addActionListener(e -> openBorrowDialog());
         btnReturn.addActionListener(e -> returnSelected());
         btnRenew.addActionListener(e -> renewSelected());
+        btnExportPdf.addActionListener(e -> exportPdfSelected());
         btnDelete.addActionListener(e -> deleteSelected());
         btnRefresh.addActionListener(e -> {
             searchField.setText("");
@@ -202,6 +207,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             boolean isActive  = !statusText.equals(Borrow.Status.RETURNED.getLabel());
             btnReturn.setEnabled(isActive);
             btnRenew.setEnabled(isActive);
+            btnExportPdf.setEnabled(true);
             btnDelete.setEnabled(true);
         });
 
@@ -295,6 +301,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                 list.size(), active, overdue));
             btnReturn.setEnabled(false);
             btnRenew.setEnabled(false);
+            btnExportPdf.setEnabled(false);
             btnDelete.setEnabled(false);
         } catch (Exception ex) {
             UITheme.showError(BorrowPanel.this, "Lỗi tải dữ liệu:\n" + ex.getMessage());
@@ -450,14 +457,67 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
 
         try {
             Borrow updated = borrowService.returnBook(borrowId);
-            String msg = "Đã ghi nhận trả sách \"" + bookTitle + "\" thành công!";
-            if (updated.getFineAmount() > 0) {
-                msg += "\n💰 Tiền phạt: " + UITheme.formatCurrency(updated.getFineAmount());
-            }
-            UITheme.showSuccess(this, msg);
             loadData("Tất cả", searchField.getText());
+
+            if (updated.getFineAmount() > 0) {
+                int choice = JOptionPane.showConfirmDialog(this,
+                    "Đã ghi nhận trả sách \"" + bookTitle + "\" thành công!\n"
+                    + "💰 Tiền phạt quá hạn: " + UITheme.formatCurrency(updated.getFineAmount()) + "\n\n"
+                    + "Bạn có muốn xem trước và xuất file PDF Biên lai thu tiền phạt ngay không?",
+                    "Xuất Biên Lai Thu Tiền Phạt",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+
+                if (choice == JOptionPane.YES_OPTION) {
+                    ReceiptPreviewDialog dlg = new ReceiptPreviewDialog(
+                        SwingUtilities.getWindowAncestor(this),
+                        updated,
+                        ReceiptPreviewDialog.ReceiptType.FINE_RECEIPT);
+                    dlg.setVisible(true);
+                }
+            } else {
+                UITheme.showSuccess(this, "Đã ghi nhận trả sách \"" + bookTitle + "\" thành công!");
+            }
         } catch (Exception ex) {
             UITheme.showError(this, ex.getMessage());
+        }
+    }
+
+    private void exportPdfSelected() {
+        int borrowId = getSelectedBorrowId();
+        if (borrowId < 0) {
+            UITheme.showWarning(this, "Vui lòng chọn một phiếu mượn.");
+            return;
+        }
+
+        try {
+            Borrow borrow = borrowService.getBorrowById(borrowId);
+            if (borrow == null) {
+                UITheme.showError(this, "Không tìm thấy thông tin phiếu mượn #" + borrowId);
+                return;
+            }
+
+            Window parent = SwingUtilities.getWindowAncestor(this);
+            if (borrow.getFineAmount() > 0) {
+                Object[] options = {"📄 Phiếu Mượn Sách", "💰 Biên Lai Thu Tiền Phạt", "Hủy"};
+                int choice = JOptionPane.showOptionDialog(this,
+                    "Phiếu mượn #" + borrowId + " có tiền phạt (" + UITheme.formatCurrency(borrow.getFineAmount()) + ").\n"
+                    + "Vui lòng chọn loại chứng từ cần xuất PDF:",
+                    "Chọn Loại Chứng Từ Xuất PDF",
+                    JOptionPane.YES_NO_CANCEL_OPTION,
+                    JOptionPane.QUESTION_MESSAGE,
+                    null, options, options[0]);
+
+                if (choice == 0) {
+                    new ReceiptPreviewDialog(parent, borrow, ReceiptPreviewDialog.ReceiptType.BORROW_SLIP).setVisible(true);
+                } else if (choice == 1) {
+                    new ReceiptPreviewDialog(parent, borrow, ReceiptPreviewDialog.ReceiptType.FINE_RECEIPT).setVisible(true);
+                }
+            } else {
+                new ReceiptPreviewDialog(parent, borrow, ReceiptPreviewDialog.ReceiptType.BORROW_SLIP).setVisible(true);
+            }
+        } catch (Exception ex) {
+            UITheme.showError(this, "Lỗi khi nạp dữ liệu phiếu mượn:\n" + ex.getMessage());
         }
     }
 

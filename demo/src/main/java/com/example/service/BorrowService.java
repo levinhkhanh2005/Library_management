@@ -272,6 +272,10 @@ public class BorrowService {
 
     // ===================== Truy vấn =====================
 
+    public Borrow getBorrowById(int id) throws SQLException {
+        return borrowDAO.findById(id);
+    }
+
     public List<Borrow> getAllBorrows() throws SQLException {
         return borrowDAO.findAll();
     }

@@ -1,6 +1,7 @@
 package com.example.view.dialogs;
 
 import com.example.model.Book;
+import com.example.model.Borrow;
 import com.example.model.Reader;
 import com.example.service.BookService;
 import com.example.service.BorrowService;
@@ -316,19 +317,31 @@ public class BorrowDialog extends JDialog {
         }
 
         try {
-            borrowService.borrowBook(
+            Borrow createdBorrow = borrowService.borrowBook(
                 selectedBook.getId(),
                 selectedReader.getId(),
                 dueDate,
                 fNotes.getText().trim()
             );
-            UITheme.showSuccess(this,
-                "Tạo phiếu mượn thành công!\n"
+            saved = true;
+            Window parentWindow = SwingUtilities.getWindowAncestor(this);
+            dispose();
+
+            int choice = JOptionPane.showConfirmDialog(parentWindow,
+                "Tạo phiếu mượn #" + createdBorrow.getId() + " thành công!\n"
                 + "📚 Sách: " + selectedBook.getTitle() + "\n"
                 + "👤 Độc giả: " + selectedReader.getFullName() + "\n"
-                + "📅 Hạn trả: " + dueDate);
-            saved = true;
-            dispose();
+                + "📅 Hạn trả: " + dueDate + "\n\n"
+                + "Bạn có muốn xem trước và xuất file PDF phiếu mượn ngay không?",
+                "Tạo Phiếu Mượn Thành Công",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.INFORMATION_MESSAGE);
+
+            if (choice == JOptionPane.YES_OPTION) {
+                ReceiptPreviewDialog preview = new ReceiptPreviewDialog(
+                    parentWindow, createdBorrow, ReceiptPreviewDialog.ReceiptType.BORROW_SLIP);
+                preview.setVisible(true);
+            }
         } catch (IllegalArgumentException | IllegalStateException ex) {
             UITheme.showWarning(this, ex.getMessage());
         } catch (Exception ex) {
