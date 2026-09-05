@@ -92,14 +92,18 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnGroup.add(btnRefresh);
         toolbar.add(btnGroup, BorderLayout.WEST);
 
-        // Bên phải: ô tìm kiếm
+        // Bên phải: ô tìm kiếm và nút lọc nâng cao
         JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         searchPanel.setOpaque(false);
         searchField = UITheme.createSearchField();
         JButton btnSearch = UITheme.createPrimaryButton("Tìm");
         btnSearch.setPreferredSize(new Dimension(70, UITheme.INPUT_HEIGHT));
+        
+        JButton btnAdvancedFilter = UITheme.createSecondaryButton("🔍 Lọc Nâng Cao");
+
         searchPanel.add(searchField);
         searchPanel.add(btnSearch);
+        searchPanel.add(btnAdvancedFilter);
         toolbar.add(searchPanel, BorderLayout.EAST);
 
         // ---- Sự kiện ----
@@ -109,6 +113,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnRefresh.addActionListener(e -> { searchField.setText(""); loadData(null); });
         btnSearch.addActionListener(e -> loadData(searchField.getText()));
         searchField.addActionListener(e -> loadData(searchField.getText())); // Enter
+        btnAdvancedFilter.addActionListener(e -> openAdvancedFilterDialog());
 
         return toolbar;
     }
@@ -204,31 +209,48 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
                 return bookService.searchBooks(keyword);
             }
             @Override protected void done() {
-                try {
-                    List<Book> books = get();
-                    tableModel.setRowCount(0);
-                    int idx = 1;
-                    for (Book b : books) {
-                        tableModel.addRow(new Object[]{
-                            idx++,
-                            b.getIsbn(),
-                            b.getTitle(),
-                            b.getAuthor(),
-                            b.getCategory(),
-                            b.getPublisher(),
-                            b.getPublishYear(),
-                            b.getTotalCopies(),
-                            b.getAvailableCopies()
-                        });
-                    }
-                    statusLabel.setText("Tổng: " + books.size() + " cuốn sách"
-                        + (keyword != null && !keyword.isBlank() ? "  (từ khóa: \"" + keyword + "\")" : ""));
-                } catch (Exception ex) {
-                    UITheme.showError(BookPanel.this, "Lỗi tải dữ liệu:\n" + ex.getMessage());
-                }
+                updateTableData(this, keyword);
             }
         };
         worker.execute();
+    }
+
+    private void loadAdvancedData(String keyword, String category, Integer publishYear, Boolean isAvailable) {
+        statusLabel.setText("Đang tải (Lọc nâng cao)...");
+        SwingWorker<List<Book>, Void> worker = new SwingWorker<>() {
+            @Override protected List<Book> doInBackground() throws Exception {
+                return bookService.advancedSearchBooks(keyword, category, publishYear, isAvailable);
+            }
+            @Override protected void done() {
+                updateTableData(this, "Lọc nâng cao");
+            }
+        };
+        worker.execute();
+    }
+
+    private void updateTableData(SwingWorker<List<Book>, Void> worker, String labelContext) {
+        try {
+            List<Book> books = worker.get();
+            tableModel.setRowCount(0);
+            int idx = 1;
+            for (Book b : books) {
+                tableModel.addRow(new Object[]{
+                    idx++,
+                    b.getIsbn(),
+                    b.getTitle(),
+                    b.getAuthor(),
+                    b.getCategory(),
+                    b.getPublisher(),
+                    b.getPublishYear(),
+                    b.getTotalCopies(),
+                    b.getAvailableCopies()
+                });
+            }
+            statusLabel.setText("Tổng: " + books.size() + " cuốn sách"
+                + (labelContext != null && !labelContext.isBlank() ? "  (từ khóa/lọc: \"" + labelContext + "\")" : ""));
+        } catch (Exception ex) {
+            UITheme.showError(BookPanel.this, "Lỗi tải dữ liệu:\n" + ex.getMessage());
+        }
     }
 
     /** Lấy Book được chọn từ bảng. */
@@ -280,6 +302,94 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         } catch (Exception ex) {
             UITheme.showError(this, ex.getMessage());
         }
+    }
+
+    private void openAdvancedFilterDialog() {
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Lọc Nâng Cao", true);
+        dialog.setLayout(new BorderLayout());
+        dialog.setSize(400, 300);
+        dialog.setLocationRelativeTo(this);
+        dialog.setResizable(false);
+
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBorder(new EmptyBorder(16, 20, 16, 20));
+        content.setBackground(UITheme.BG_WHITE);
+
+        // Keyword
+        JPanel pnlKeyword = new JPanel(new BorderLayout(5, 5));
+        pnlKeyword.setOpaque(false);
+        pnlKeyword.add(new JLabel("Từ khóa:"), BorderLayout.WEST);
+        JTextField txtKeyword = UITheme.createTextField("");
+        txtKeyword.setText(searchField.getText());
+        pnlKeyword.add(txtKeyword, BorderLayout.CENTER);
+
+        // Category
+        JPanel pnlCategory = new JPanel(new BorderLayout(5, 5));
+        pnlCategory.setOpaque(false);
+        pnlCategory.add(new JLabel("Thể loại:"), BorderLayout.WEST);
+        JComboBox<String> cbCategory = new JComboBox<>();
+        cbCategory.addItem("Tất cả");
+        try {
+            List<String> categories = bookService.getAllCategories();
+            for (String cat : categories) {
+                cbCategory.addItem(cat);
+            }
+        } catch (Exception ignored) {}
+        pnlCategory.add(cbCategory, BorderLayout.CENTER);
+
+        // Publish Year
+        JPanel pnlYear = new JPanel(new BorderLayout(5, 5));
+        pnlYear.setOpaque(false);
+        pnlYear.add(new JLabel("Năm XB:"), BorderLayout.WEST);
+        JTextField txtYear = UITheme.createTextField("VD: 2020");
+        pnlYear.add(txtYear, BorderLayout.CENTER);
+
+        // Is Available
+        JPanel pnlAvailable = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        pnlAvailable.setOpaque(false);
+        JCheckBox chkAvailable = new JCheckBox("Chỉ hiện sách có sẵn");
+        chkAvailable.setOpaque(false);
+        pnlAvailable.add(chkAvailable);
+
+        content.add(pnlKeyword);
+        content.add(Box.createVerticalStrut(10));
+        content.add(pnlCategory);
+        content.add(Box.createVerticalStrut(10));
+        content.add(pnlYear);
+        content.add(Box.createVerticalStrut(10));
+        content.add(pnlAvailable);
+
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        actionPanel.setBackground(UITheme.BG_WHITE);
+        JButton btnCancel = UITheme.createSecondaryButton("Hủy");
+        JButton btnFilter = UITheme.createPrimaryButton("Lọc Kết Quả");
+
+        btnCancel.addActionListener(e -> dialog.dispose());
+        btnFilter.addActionListener(e -> {
+            String kw = txtKeyword.getText();
+            String cat = (String) cbCategory.getSelectedItem();
+            Integer year = null;
+            if (!txtYear.getText().isBlank()) {
+                try {
+                    year = Integer.parseInt(txtYear.getText().trim());
+                } catch (NumberFormatException ex) {
+                    UITheme.showError(dialog, "Năm xuất bản không hợp lệ.");
+                    return;
+                }
+            }
+            Boolean isAvail = chkAvailable.isSelected();
+            dialog.dispose();
+            searchField.setText(kw); // Đồng bộ keyword
+            loadAdvancedData(kw, cat, year, isAvail);
+        });
+
+        actionPanel.add(btnCancel);
+        actionPanel.add(btnFilter);
+
+        dialog.add(content, BorderLayout.CENTER);
+        dialog.add(actionPanel, BorderLayout.SOUTH);
+        dialog.setVisible(true);
     }
 
     @Override

@@ -108,8 +108,12 @@ public class AuthService {
      */
     public void changePassword(int userId, String oldPassword,
                                String newPassword) throws SQLException {
+        validateRequired(oldPassword, "Mật khẩu hiện tại");
         validateRequired(newPassword, "Mật khẩu mới");
-        if (newPassword.length() < 6) {
+        String trimmedOld = oldPassword.trim();
+        String trimmedNew = newPassword.trim();
+
+        if (trimmedNew.length() < 6) {
             throw new IllegalArgumentException("Mật khẩu mới phải có ít nhất 6 ký tự.");
         }
 
@@ -119,15 +123,34 @@ public class AuthService {
         // Nếu đổi cho chính mình: phải nhập đúng mật khẩu cũ
         boolean isSelf = currentUser != null && currentUser.getId() == userId;
         if (isSelf) {
-            if (oldPassword == null || !oldPassword.equals(target.getPassword())) {
+            String dbPass   = target.getPassword() != null ? target.getPassword().trim() : "";
+            String sessPass = currentUser.getPassword() != null ? currentUser.getPassword().trim() : "";
+            boolean match = trimmedOld.equals(dbPass) || trimmedOld.equals(sessPass);
+
+            if (!match) {
                 throw new IllegalArgumentException("Mật khẩu cũ không đúng.");
             }
         } else {
             requireAdmin(); // Admin mới được đổi mật khẩu người khác
         }
 
-        if (!userDAO.updatePassword(userId, newPassword)) {
+        if (!userDAO.updatePassword(userId, trimmedNew)) {
             throw new SQLException("Đổi mật khẩu thất bại.");
+        }
+
+        // Cập nhật session tĩnh nếu tự đổi mật khẩu của chính mình
+        if (isSelf && currentUser != null) {
+            currentUser.setPassword(trimmedNew);
+        }
+    }
+
+    /**
+     * Cập nhật thông tin người dùng. Chỉ Admin.
+     */
+    public void updateUser(User user) throws SQLException {
+        requireAdmin();
+        if (!userDAO.update(user)) {
+            throw new SQLException("Cập nhật thông tin tài khoản thất bại.");
         }
     }
 

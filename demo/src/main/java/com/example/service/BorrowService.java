@@ -28,14 +28,16 @@ public class BorrowService {
     /** Số ngày mượn mặc định. */
     public static final int DEFAULT_BORROW_DAYS = 14;
 
-    /** Số sách tối đa một độc giả được mượn cùng lúc. */
-    public static final int MAX_ACTIVE_BORROWS_PER_READER = 3;
-
     /** Số lần gia hạn tối đa cho mỗi phiếu mượn. */
     public static final int MAX_RENEW_COUNT = 2;
 
-    /** Số ngày gia hạn thêm mỗi lần. */
-    public static final int RENEW_DAYS = 7;
+    /** Số ngày gia hạn mặc định. */
+    public static final int DEFAULT_RENEW_DAYS = 7;
+    public static final int RENEW_DAYS = DEFAULT_RENEW_DAYS;
+
+    /** Số lượng sách mượn tối đa cùng lúc của một độc giả. */
+    public static final int MAX_CONCURRENT_BORROWS = 5;
+    public static final int MAX_ACTIVE_BORROWS_PER_READER = MAX_CONCURRENT_BORROWS;
 
     /** Tiền bồi thường mặc định khi mất sách (VND). */
     public static final double DEFAULT_LOST_COMPENSATION = 100_000.0;
@@ -50,7 +52,7 @@ public class BorrowService {
 
     /**
      * Tạo phiếu mượn sách.
-     * Kiểm tra: sách còn bản, độc giả hoạt động, chưa mượn cuốn đó.
+     * Kiểm tra: sách còn bản, độc giả hoạt động, chưa vượt giới hạn mượn, chưa mượn cuốn đó.
      *
      * @param bookId    ID sách cần mượn
      * @param readerId  ID độc giả
@@ -73,12 +75,12 @@ public class BorrowService {
         if (!reader.canBorrow())   throw new IllegalStateException(
             "Tài khoản độc giả \"" + reader.getFullName() + "\" đang bị khóa hoặc hết hạn.");
 
-        // 3. Kiểm tra hạn mức mượn tối đa
+        // 3. Kiểm tra số sách đang mượn chưa vượt quá giới hạn
         int activeCount = borrowDAO.countActiveByReader(readerId);
-        if (activeCount >= MAX_ACTIVE_BORROWS_PER_READER) {
+        if (activeCount >= MAX_CONCURRENT_BORROWS) {
             throw new IllegalStateException(
-                "Độc giả \"" + reader.getFullName() +
-                "\" đã đạt hạn mức mượn tối đa (" + MAX_ACTIVE_BORROWS_PER_READER + " cuốn).");
+                "Độc giả \"" + reader.getFullName() + "\" đã đạt giới hạn mượn " +
+                MAX_CONCURRENT_BORROWS + " cuốn sách cùng lúc.");
         }
 
         // 4. Kiểm tra chưa mượn cuốn đó
@@ -169,56 +171,76 @@ public class BorrowService {
     // ===================== Gia hạn mượn sách =====================
 
     /**
-     * Gia hạn phiếu mượn: cộng thêm RENEW_DAYS ngày tính từ hạn trả cũ.
-     * Điều kiện: phiếu đang BORROWING, chưa vượt MAX_RENEW_COUNT.
+    /**
+     * Gia hạn thời gian mượn sách thêm số ngày chỉ định.
+     * Kiểm tra: phiếu mượn tồn tại, chưa trả sách, chưa vượt quá số lần gia hạn tối đa.
      *
-     * @param borrowId ID phiếu mượn
-     * @return Borrow đã cập nhật
+     * @param borrowId  ID phiếu mượn cần gia hạn
+     * @param extraDays Số ngày gia hạn thêm (phải > 0)
+     * @return Borrow đã được cập nhật hạn trả và số lần gia hạn
      */
-    public Borrow renewBook(int borrowId) throws SQLException {
+    public Borrow renewBorrow(int borrowId, int extraDays) throws SQLException {
+        if (extraDays <= 0) {
+            throw new IllegalArgumentException("Số ngày gia hạn phải lớn hơn 0.");
+        }
+
         Borrow borrow = borrowDAO.findById(borrowId);
-        if (borrow == null) throw new IllegalArgumentException("Phiếu mượn không tồn tại.");
-        if (borrow.getStatus() != Borrow.Status.BORROWING) {
+        if (borrow == null) {
+            throw new IllegalArgumentException("Phiếu mượn không tồn tại.");
+        }
+        if (borrow.isReturned()) {
+            throw new IllegalStateException("Không thể gia hạn phiếu đã trả sách.");
+        }
+        if (borrow.isLost()) {
+            throw new IllegalStateException("Không thể gia hạn phiếu đã báo mất sách.");
+        }
+        if (borrow.getRenewCount() >= MAX_RENEW_COUNT) {
             throw new IllegalStateException(
-                "Chỉ có thể gia hạn phiếu đang mượn (đúng hạn). Phiếu hiện tại: " + borrow.getStatus().getLabel());
+                "Phiếu mượn đã đạt giới hạn số lần gia hạn tối đa (" + MAX_RENEW_COUNT + " lần).");
         }
 
-        // Kiểm tra số lần gia hạn đã dùng
-        int currentRenewCount = parseRenewCount(borrow.getNotes());
-        if (currentRenewCount >= MAX_RENEW_COUNT) {
-            throw new IllegalStateException(
-                "Phiếu đã gia hạn tối đa " + MAX_RENEW_COUNT + " lần.");
+        // Tính hạn trả mới
+        LocalDate currentDue;
+        try {
+            currentDue = LocalDate.parse(borrow.getDueDate(), DATE_FMT);
+        } catch (Exception e) {
+            currentDue = LocalDate.now();
         }
 
-        // Tính hạn trả mới: cộng thêm RENEW_DAYS tính từ hạn trả cũ
-        LocalDate oldDue = LocalDate.parse(borrow.getDueDate(), DATE_FMT);
-        String newDueDate = oldDue.plusDays(RENEW_DAYS).format(DATE_FMT);
+        // Nếu phiếu đã quá hạn, hạn mới tính từ ngày hôm nay; nếu còn hạn thì cộng dồn từ hạn cũ
+        LocalDate baseDate = (borrow.getStatus() == Borrow.Status.OVERDUE || currentDue.isBefore(LocalDate.now()))
+                ? LocalDate.now()
+                : currentDue;
+        LocalDate newDue = baseDate.plusDays(extraDays);
+        String newDueDateStr = newDue.format(DATE_FMT);
 
-        // Cập nhật ghi chú với số lần gia hạn
-        int newRenewCount = currentRenewCount + 1;
-        String existingNotes = borrow.getNotes() != null ? borrow.getNotes() : "";
-        // Loại bỏ ghi chú gia hạn cũ trước khi thêm mới
-        existingNotes = existingNotes.replaceAll("\\[Gia hạn \\d+/" + MAX_RENEW_COUNT + "\\]", "").trim();
-        String renewNote = "[Gia hạn " + newRenewCount + "/" + MAX_RENEW_COUNT + "]";
-        String newNotes = (existingNotes.isEmpty() ? "" : existingNotes + " ") + renewNote;
+        int newRenewCount = borrow.getRenewCount() + 1;
+        Borrow.Status newStatus = Borrow.Status.BORROWING; // Chuyển về đang mượn sau khi gia hạn
 
-        borrowDAO.renewDueDate(borrowId, newDueDate, newNotes);
+        boolean ok = borrowDAO.renewBorrow(borrowId, newDueDateStr, newRenewCount, newStatus);
+        if (!ok) {
+            throw new SQLException("Gia hạn phiếu mượn thất bại trong CSDL.");
+        }
 
-        borrow.setDueDate(newDueDate);
-        borrow.setNotes(newNotes);
+        borrow.setDueDate(newDueDateStr);
         borrow.setRenewCount(newRenewCount);
+        borrow.setStatus(newStatus);
+        borrow.setFineAmount(0.0);
         return borrow;
     }
 
     /**
-     * Phân tích số lần gia hạn từ ghi chú (dạng "[Gia hạn X/Y]").
+     * Gia hạn thời gian mượn sách với số ngày mặc định (DEFAULT_RENEW_DAYS).
      */
-    private int parseRenewCount(String notes) {
-        if (notes == null || notes.isEmpty()) return 0;
-        var matcher = java.util.regex.Pattern
-            .compile("\\[Gia hạn (\\d+)/" + MAX_RENEW_COUNT + "\\]")
-            .matcher(notes);
-        return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
+    public Borrow renewBorrow(int borrowId) throws SQLException {
+        return renewBorrow(borrowId, DEFAULT_RENEW_DAYS);
+    }
+
+    /**
+     * Gia hạn sách (tương thích ngược).
+     */
+    public Borrow renewBook(int borrowId) throws SQLException {
+        return renewBorrow(borrowId, DEFAULT_RENEW_DAYS);
     }
 
     // ===================== Báo mất sách =====================
@@ -265,6 +287,37 @@ public class BorrowService {
         return borrow;
     }
 
+    // ===================== Xóa phiếu mượn =====================
+    /**
+     * Xóa phiếu mượn khỏi cơ sở dữ liệu.
+     * Nếu phiếu mượn chưa được trả, tự động cập nhật lại số lượng sách sẵn có (+1).
+     *
+     * @param borrowId ID phiếu mượn cần xóa
+     */
+    public void deleteBorrow(int borrowId) throws SQLException {
+        Borrow borrow = borrowDAO.findById(borrowId);
+        if (borrow == null) {
+            throw new IllegalArgumentException("Phiếu mượn không tồn tại.");
+        }
+        Connection conn = DatabaseConnection.getInstance().getConnection();
+        boolean autoCommit = conn.getAutoCommit();
+        try {
+            conn.setAutoCommit(false);
+            if (!borrowDAO.delete(borrowId)) {
+                throw new SQLException("Xóa phiếu mượn thất bại.");
+            }
+            if (!borrow.isReturned() && !borrow.isLost()) {
+                bookDAO.updateAvailableCopies(borrow.getBookId(), +1);
+            }
+            conn.commit();
+        } catch (Exception e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(autoCommit);
+        }
+    }
+
     // ===================== Đồng bộ trạng thái quá hạn =====================
 
     /**
@@ -277,6 +330,10 @@ public class BorrowService {
     }
 
     // ===================== Truy vấn =====================
+
+    public Borrow getBorrowById(int id) throws SQLException {
+        return borrowDAO.findById(id);
+    }
 
     public List<Borrow> getAllBorrows() throws SQLException {
         return borrowDAO.findAll();
@@ -300,6 +357,10 @@ public class BorrowService {
 
     public List<Borrow> searchBorrows(String keyword) throws SQLException {
         return borrowDAO.search(keyword);
+    }
+
+    public List<Borrow> advancedSearchBorrows(String keyword, String fromDate, String toDate, Borrow.Status status) throws SQLException {
+        return borrowDAO.advancedSearch(keyword, fromDate, toDate, status);
     }
 
     public int getActiveBorrowCount() throws SQLException {

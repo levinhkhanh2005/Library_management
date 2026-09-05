@@ -161,6 +161,45 @@ public class BookDAO {
     }
 
     /**
+     * Tìm kiếm nâng cao kết hợp nhiều tiêu chí.
+     */
+    public List<Book> advancedSearch(String keyword, String category, Integer publishYear, Boolean isAvailable) throws SQLException {
+        StringBuilder sql = new StringBuilder("SELECT * FROM books WHERE 1=1 ");
+        List<Object> params = new ArrayList<>();
+
+        if (keyword != null && !keyword.isBlank()) {
+            sql.append(" AND (title LIKE ? OR author LIKE ? OR isbn LIKE ?) ");
+            String like = "%" + keyword.trim() + "%";
+            params.add(like);
+            params.add(like);
+            params.add(like);
+        }
+
+        if (category != null && !category.isBlank() && !category.equals("Tất cả")) {
+            sql.append(" AND category = ? ");
+            params.add(category);
+        }
+
+        if (publishYear != null) {
+            sql.append(" AND publish_year = ? ");
+            params.add(publishYear);
+        }
+
+        if (isAvailable != null && isAvailable) {
+            sql.append(" AND available_copies > 0 ");
+        }
+
+        sql.append(" ORDER BY title");
+
+        try (PreparedStatement ps = getConn().prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            return mapList(ps.executeQuery());
+        }
+    }
+
+    /**
      * Tìm kiếm theo thể loại cụ thể.
      */
     public List<Book> findByCategory(String category) throws SQLException {

@@ -39,8 +39,8 @@ public class Borrow {
     private String returnDate;   // dd/MM/yyyy — ngày trả thực tế (null nếu chưa trả)
     private Status status;
     private double fineAmount;   // Tiền phạt (đồng)
-    private String notes;
     private int renewCount;      // Số lần đã gia hạn
+    private String notes;
 
     // Dữ liệu join (không lưu trong DB, dùng để hiển thị)
     private String bookTitle;
@@ -73,6 +73,13 @@ public class Borrow {
     public Borrow(int id, int bookId, int readerId, String borrowDate,
                   String dueDate, String returnDate, Status status,
                   double fineAmount, String notes) {
+        this(id, bookId, readerId, borrowDate, dueDate, returnDate, status, fineAmount, notes, 0);
+    }
+
+    /** Constructor đầy đủ kèm renewCount (đọc từ DB). */
+    public Borrow(int id, int bookId, int readerId, String borrowDate,
+                  String dueDate, String returnDate, Status status,
+                  double fineAmount, String notes, int renewCount) {
         this.id = id;
         this.bookId = bookId;
         this.readerId = readerId;
@@ -82,6 +89,7 @@ public class Borrow {
         this.status = status;
         this.fineAmount = fineAmount;
         this.notes = notes;
+        this.renewCount = renewCount;
     }
 
     // ===================== Getters & Setters =====================
@@ -110,11 +118,11 @@ public class Borrow {
     public double getFineAmount() { return fineAmount; }
     public void setFineAmount(double fineAmount) { this.fineAmount = fineAmount; }
 
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
-
     public int getRenewCount() { return renewCount; }
     public void setRenewCount(int renewCount) { this.renewCount = renewCount; }
+
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 
     // Dữ liệu join (display only)
     public String getBookTitle() { return bookTitle; }
@@ -146,9 +154,9 @@ public class Borrow {
         return status == Status.LOST;
     }
 
-    /** Kiểm tra phiếu có thể gia hạn không (chỉ BORROWING, chưa vượt hạn mức). */
+    /** Kiểm tra xem phiếu có thể gia hạn hay không dựa trên số lần tối đa. */
     public boolean canRenew(int maxRenewCount) {
-        return status == Status.BORROWING && renewCount < maxRenewCount;
+        return isActive() && renewCount < maxRenewCount;
     }
 
     @Override

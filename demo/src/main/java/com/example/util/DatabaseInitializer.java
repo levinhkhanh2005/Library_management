@@ -55,6 +55,7 @@ public class DatabaseInitializer {
                 return_date TEXT,
                 status      TEXT    NOT NULL DEFAULT 'BORROWING',
                 fine_amount REAL             DEFAULT 0.0,
+                renew_count INTEGER          DEFAULT 0,
                 notes       TEXT,
                 created_at  TEXT    DEFAULT (datetime('now','localtime')),
                 FOREIGN KEY (book_id)   REFERENCES books(id),
@@ -158,6 +159,11 @@ public class DatabaseInitializer {
     //  Phương thức khởi tạo
     // ============================================================
 
+    /** Alias cho initialize(). */
+    public static void initDatabase() {
+        initialize();
+    }
+
     /**
      * Khởi tạo toàn bộ cơ sở dữ liệu:
      * tạo bảng, index, chèn dữ liệu mặc định và dữ liệu mẫu.
@@ -188,6 +194,14 @@ public class DatabaseInitializer {
             stmt.execute(CREATE_TABLE_READERS);
             stmt.execute(CREATE_TABLE_BORROWS);
             stmt.execute(CREATE_TABLE_USERS);
+
+            // Migration: thêm cột renew_count nếu DB đã tồn tại từ phiên bản trước
+            try {
+                stmt.execute("ALTER TABLE borrows ADD COLUMN renew_count INTEGER DEFAULT 0");
+            } catch (SQLException ignored) {
+                // Cột đã tồn tại
+            }
+
             System.out.println("[DB] Tạo bảng thành công.");
         }
     }

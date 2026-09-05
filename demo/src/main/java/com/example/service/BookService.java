@@ -118,6 +118,10 @@ public class BookService {
         return bookDAO.search(keyword);
     }
 
+    public List<Book> advancedSearchBooks(String keyword, String category, Integer publishYear, Boolean isAvailable) throws SQLException {
+        return bookDAO.advancedSearch(keyword, category, publishYear, isAvailable);
+    }
+
     public List<String> getAllCategories() throws SQLException {
         return bookDAO.findAllCategories();
     }

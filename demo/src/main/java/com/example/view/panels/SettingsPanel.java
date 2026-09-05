@@ -194,11 +194,24 @@ public class SettingsPanel extends JPanel implements MainFrame.Refreshable {
             String newPw = new String(fNew.getPassword());
             String cfmPw = new String(fCfm.getPassword());
 
+            if (oldPw.isBlank()) {
+                UITheme.showWarning(this, "Vui lòng nhập mật khẩu hiện tại.");
+                return;
+            }
+            if (newPw.isBlank()) {
+                UITheme.showWarning(this, "Vui lòng nhập mật khẩu mới.");
+                return;
+            }
             if (!newPw.equals(cfmPw)) {
-                UITheme.showWarning(this, "Mật khẩu xác nhận không khớp."); return;
+                UITheme.showWarning(this, "Mật khẩu xác nhận không khớp.");
+                return;
             }
             try {
                 User cur = AuthService.getCurrentUser();
+                if (cur == null) {
+                    UITheme.showError(this, "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
+                    return;
+                }
                 authService.changePassword(cur.getId(), oldPw, newPw);
                 UITheme.showSuccess(this, "Đổi mật khẩu thành công!");
                 fOld.setText(""); fNew.setText(""); fCfm.setText("");
@@ -326,7 +339,7 @@ public class SettingsPanel extends JPanel implements MainFrame.Refreshable {
         try {
             u.setFullName(tName.getText().trim());
             u.setRole(User.Role.fromString((String) tRole.getSelectedItem()));
-            // userDAO không expose trực tiếp, dùng AuthService qua reflection-free approach
+            authService.updateUser(u);
             UITheme.showSuccess(this, "Đã cập nhật tài khoản.");
             loadUsers();
         } catch (Exception ex) {
