@@ -75,6 +75,29 @@ public class DatabaseInitializer {
             )
             """;
 
+    private static final String CREATE_TABLE_SYSTEM_SETTINGS = """
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """;
+
+    private static final String CREATE_TABLE_EMAIL_LOGS = """
+            CREATE TABLE IF NOT EXISTS email_logs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                borrow_id       INTEGER,
+                reader_id       INTEGER,
+                recipient_email TEXT,
+                subject         TEXT,
+                content         TEXT,
+                status          TEXT    NOT NULL DEFAULT 'SUCCESS',
+                error_message   TEXT,
+                sent_at         TEXT    DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (borrow_id) REFERENCES borrows(id),
+                FOREIGN KEY (reader_id) REFERENCES readers(id)
+            )
+            """;
+
     // ============================================================
     //  Index để tăng tốc truy vấn
     // ============================================================
@@ -86,6 +109,9 @@ public class DatabaseInitializer {
         "CREATE INDEX IF NOT EXISTS idx_borrows_book   ON borrows(book_id)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_reader ON borrows(reader_id)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_status ON borrows(status)",
+        "CREATE INDEX IF NOT EXISTS idx_email_logs_borrow  ON email_logs(borrow_id)",
+        "CREATE INDEX IF NOT EXISTS idx_email_logs_reader  ON email_logs(reader_id)",
+        "CREATE INDEX IF NOT EXISTS idx_email_logs_sent_at ON email_logs(sent_at)",
     };
 
     // ============================================================
@@ -103,6 +129,16 @@ public class DatabaseInitializer {
             INSERT OR IGNORE INTO users (username, password, full_name, role, active)
             VALUES ('thuthu', 'thuthu123', 'Nguyễn Thị Thu', 'LIBRARIAN', 1)
             """;
+
+    /** Cấu hình SMTP mặc định cho Gmail. */
+    private static final String[] INSERT_DEFAULT_SMTP = {
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.host', 'smtp.gmail.com')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.port', '587')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.username', '')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.password', '')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.from_name', 'Thư Viện Nguyễn Huệ')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.tls', 'true')",
+    };
 
     // Dữ liệu mẫu sách
     private static final String[] INSERT_SAMPLE_BOOKS = {
@@ -194,6 +230,8 @@ public class DatabaseInitializer {
             stmt.execute(CREATE_TABLE_READERS);
             stmt.execute(CREATE_TABLE_BORROWS);
             stmt.execute(CREATE_TABLE_USERS);
+            stmt.execute(CREATE_TABLE_SYSTEM_SETTINGS);
+            stmt.execute(CREATE_TABLE_EMAIL_LOGS);
 
             // Migration: thêm cột renew_count nếu DB đã tồn tại từ phiên bản trước
             try {
@@ -221,6 +259,9 @@ public class DatabaseInitializer {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(INSERT_DEFAULT_ADMIN);
             stmt.execute(INSERT_DEFAULT_LIBRARIAN);
+            for (String sql : INSERT_DEFAULT_SMTP) {
+                stmt.execute(sql);
+            }
             System.out.println("[DB] Dữ liệu người dùng mặc định đã được tạo.");
         }
     }
