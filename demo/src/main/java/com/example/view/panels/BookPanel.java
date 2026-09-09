@@ -5,6 +5,7 @@ import com.example.service.BookService;
 import com.example.view.MainFrame;
 import com.example.view.UITheme;
 import com.example.view.dialogs.BookDialog;
+import com.example.view.dialogs.CategoryManageDialog;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -81,6 +82,8 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         JButton btnAdd = UITheme.createPrimaryButton("＋  Thêm Sách");
         btnEdit   = UITheme.createSecondaryButton("✎  Sửa");
         btnDelete = UITheme.createDangerButton("✕  Xóa");
+        JButton btnCategory = UITheme.createSecondaryButton("📂  Thể Loại");
+        btnCategory.setToolTipText("Quản lý danh mục thể loại sách");
         JButton btnRefresh = UITheme.createSecondaryButton("↺  Làm Mới");
 
         btnEdit.setEnabled(false);
@@ -89,6 +92,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnGroup.add(btnAdd);
         btnGroup.add(btnEdit);
         btnGroup.add(btnDelete);
+        btnGroup.add(btnCategory);
         btnGroup.add(btnRefresh);
         toolbar.add(btnGroup, BorderLayout.WEST);
 
@@ -110,6 +114,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnAdd.addActionListener(e -> openAddDialog());
         btnEdit.addActionListener(e -> openEditDialog());
         btnDelete.addActionListener(e -> deleteSelected());
+        btnCategory.addActionListener(e -> openCategoryManageDialog());
         btnRefresh.addActionListener(e -> { searchField.setText(""); loadData(null); });
         btnSearch.addActionListener(e -> loadData(searchField.getText()));
         searchField.addActionListener(e -> loadData(searchField.getText())); // Enter
@@ -301,6 +306,14 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
             loadData(searchField.getText());
         } catch (Exception ex) {
             UITheme.showError(this, ex.getMessage());
+        }
+    }
+
+    private void openCategoryManageDialog() {
+        CategoryManageDialog dialog = new CategoryManageDialog((Frame) SwingUtilities.getWindowAncestor(this));
+        dialog.setVisible(true);
+        if (dialog.isDataChanged()) {
+            loadData(searchField.getText());
         }
     }
 
