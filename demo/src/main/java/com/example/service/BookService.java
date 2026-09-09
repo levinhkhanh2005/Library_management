@@ -1,9 +1,12 @@
 package com.example.service;
 
 import com.example.dao.BookDAO;
+import com.example.dao.CategoryDAO;
 import com.example.model.Book;
+import com.example.model.Category;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -13,6 +16,7 @@ import java.util.List;
 public class BookService {
 
     private final BookDAO bookDAO = new BookDAO();
+    private final CategoryDAO categoryDAO = new CategoryDAO();
 
     // ===================== Thêm sách =====================
 
@@ -123,7 +127,12 @@ public class BookService {
     }
 
     public List<String> getAllCategories() throws SQLException {
-        return bookDAO.findAllCategories();
+        List<Category> cats = categoryDAO.findAll();
+        List<String> list = new ArrayList<>();
+        for (Category c : cats) {
+            list.add(c.getName());
+        }
+        return list;
     }
 
     public int getTotalBooks() throws SQLException {

@@ -1,7 +1,9 @@
 package com.example.view.dialogs;
 
 import com.example.model.Book;
+import com.example.model.Category;
 import com.example.service.BookService;
+import com.example.service.CategoryService;
 import com.example.view.UITheme;
 
 import javax.swing.*;
@@ -9,20 +11,23 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.time.Year;
+import java.util.List;
 
 /**
  * Dialog thêm mới hoặc chỉnh sửa thông tin sách.
  */
 public class BookDialog extends JDialog {
 
-    private final BookService bookService = new BookService();
-    private final Book        editBook;     // null = thêm mới, non-null = sửa
-    private boolean           saved = false;
+    private final BookService     bookService     = new BookService();
+    private final CategoryService categoryService = new CategoryService();
+    private final Book            editBook;     // null = thêm mới, non-null = sửa
+    private boolean               saved = false;
 
     // ---- Form fields ----
-    private JTextField  fIsbn, fTitle, fAuthor, fCategory, fPublisher;
-    private JSpinner    fYear, fTotalCopies, fAvailCopies;
-    private JTextArea   fDescription;
+    private JTextField          fIsbn, fTitle, fAuthor, fPublisher;
+    private JComboBox<Category> fCategory;
+    private JSpinner            fYear, fTotalCopies, fAvailCopies;
+    private JTextArea           fDescription;
 
     public BookDialog(Frame parent, Book book) {
         super(parent, book == null ? "Thêm Sách Mới" : "Chỉnh Sửa Sách", true);
@@ -121,8 +126,29 @@ public class BookDialog extends JDialog {
         g.gridx = 0; g.weightx = 0.3;
         mainGroup.add(label("Thể Loại"), g);
         g.gridx = 1; g.weightx = 0.7;
-        fCategory = UITheme.createTextField("VD: Văn học, Khoa học...");
-        mainGroup.add(fCategory, g);
+
+        JPanel pnlCat = new JPanel(new BorderLayout(4, 0));
+        pnlCat.setOpaque(false);
+        fCategory = new JComboBox<>();
+        fCategory.setFont(UITheme.FONT_BODY);
+        fCategory.setPreferredSize(new Dimension(0, UITheme.INPUT_HEIGHT));
+        loadCategories(null);
+
+        JButton btnQuickAddCat = UITheme.createSecondaryButton("＋");
+        btnQuickAddCat.setToolTipText("Thêm thể loại mới");
+        btnQuickAddCat.setPreferredSize(new Dimension(36, UITheme.INPUT_HEIGHT));
+        btnQuickAddCat.addActionListener(e -> {
+            CategoryDialog dlg = new CategoryDialog(this, null);
+            dlg.setVisible(true);
+            if (dlg.isSaved() && dlg.getCategory() != null) {
+                loadCategories(dlg.getCategory().getName());
+            }
+        });
+
+        pnlCat.add(fCategory, BorderLayout.CENTER);
+        pnlCat.add(btnQuickAddCat, BorderLayout.EAST);
+        mainGroup.add(pnlCat, g);
+
         g.gridx = 2; g.weightx = 0.2;
         mainGroup.add(label("Nhà XB"), g);
         g.gridx = 3; g.weightx = 0.3;
@@ -238,14 +264,33 @@ public class BookDialog extends JDialog {
     }
 
     // ================================================================
-    //  Populate / Save
+    //  Populate / Save / Category Helper
     // ================================================================
+
+    private void loadCategories(String selectCategoryName) {
+        fCategory.removeAllItems();
+        fCategory.addItem(new Category(0, "-- Chọn thể loại --", ""));
+        try {
+            List<Category> categories = categoryService.getAllCategories();
+            Category toSelect = null;
+            for (Category c : categories) {
+                fCategory.addItem(c);
+                if (selectCategoryName != null && !selectCategoryName.isBlank()
+                    && selectCategoryName.trim().equalsIgnoreCase(c.getName().trim())) {
+                    toSelect = c;
+                }
+            }
+            if (toSelect != null) {
+                fCategory.setSelectedItem(toSelect);
+            }
+        } catch (Exception ignored) {}
+    }
 
     private void populateFields(Book book) {
         fIsbn.setText(book.getIsbn());
         fTitle.setText(book.getTitle());
         fAuthor.setText(book.getAuthor());
-        fCategory.setText(book.getCategory());
+        loadCategories(book.getCategory());
         fPublisher.setText(book.getPublisher());
         fYear.setValue(book.getPublishYear() > 0 ? book.getPublishYear() : Year.now().getValue());
         fTotalCopies.setValue(book.getTotalCopies());
@@ -258,7 +303,8 @@ public class BookDialog extends JDialog {
             String isbn      = fIsbn.getText().trim();
             String title     = fTitle.getText().trim();
             String author    = fAuthor.getText().trim();
-            String category  = fCategory.getText().trim();
+            Category selectedCat = (Category) fCategory.getSelectedItem();
+            String category  = (selectedCat != null && selectedCat.getId() > 0) ? selectedCat.getName().trim() : "";
             String publisher = fPublisher.getText().trim();
             int    year      = (Integer) fYear.getValue();
             int    total     = (Integer) fTotalCopies.getValue();

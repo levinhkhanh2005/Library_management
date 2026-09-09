@@ -3,6 +3,7 @@ package com.example.view.panels;
 import com.example.model.Borrow;
 import com.example.service.BookService;
 import com.example.service.BorrowService;
+import com.example.service.ExportService;
 import com.example.service.ReaderService;
 import com.example.view.MainFrame;
 import com.example.view.UITheme;
@@ -11,8 +12,10 @@ import com.example.util.DatabaseConnection;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.io.File;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
@@ -25,6 +28,7 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
     private final BookService   bookService   = new BookService();
     private final ReaderService readerService = new ReaderService();
     private final BorrowService borrowService = new BorrowService();
+    private final ExportService exportService = new ExportService();
 
     // Stat labels
     private JLabel lblTotalBooks, lblAvailBooks, lblTotalReaders, lblActiveReaders;
@@ -61,13 +65,231 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
             "Tổng hợp hoạt động thư viện, biểu đồ mượn sách và danh sách quá hạn"),
             BorderLayout.WEST);
 
-        JButton btnRefresh = UITheme.createSecondaryButton("↺  Làm Mới");
-        btnRefresh.addActionListener(e -> loadData());
-        JPanel btnWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        JPanel btnWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, UITheme.PAD_SM, 0));
         btnWrapper.setOpaque(false);
+
+        JButton btnExport  = UITheme.createPrimaryButton("📤  Xuất Báo Cáo");
+        JButton btnRefresh = UITheme.createSecondaryButton("↺  Làm Mới");
+
+        btnExport .addActionListener(e -> showExportDialog());
+        btnRefresh.addActionListener(e -> loadData());
+
+        btnWrapper.add(btnExport);
         btnWrapper.add(btnRefresh);
         header.add(btnWrapper, BorderLayout.EAST);
         return header;
+    }
+
+    // ================================================================
+    //  Export Dialog
+    // ================================================================
+
+    private void showExportDialog() {
+        JDialog dlg = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
+            "Xuất Báo Cáo", true);
+        dlg.setSize(540, 420);
+        dlg.setLocationRelativeTo(this);
+        dlg.setLayout(new BorderLayout());
+        dlg.getContentPane().setBackground(UITheme.BG_PRIMARY);
+
+        // ---- Tiêu đề ----
+        JLabel title = new JLabel("📤  Xuất Báo Cáo Excel / CSV");
+        title.setFont(UITheme.FONT_BOLD);
+        title.setForeground(UITheme.TEXT_PRIMARY);
+        title.setBorder(new EmptyBorder(UITheme.PAD_MD, UITheme.PAD_LG, UITheme.PAD_SM, UITheme.PAD_LG));
+        dlg.add(title, BorderLayout.NORTH);
+
+        // ---- Tabs chọn loại ----
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.setFont(UITheme.FONT_BODY);
+        tabs.setBackground(UITheme.BG_PRIMARY);
+
+        tabs.addTab("📚 Danh Sách Sách",    buildExportTab(dlg, "books"));
+        tabs.addTab("👤 Độc Giả",           buildExportTab(dlg, "readers"));
+        tabs.addTab("📋 Phiếu Mượn",        buildExportTab(dlg, "borrows"));
+        tabs.addTab("📊 Thống Kê Tháng/Năm", buildExportTab(dlg, "monthly"));
+
+        JPanel body = new JPanel(new BorderLayout());
+        body.setBorder(new EmptyBorder(0, UITheme.PAD_MD, UITheme.PAD_MD, UITheme.PAD_MD));
+        body.setBackground(UITheme.BG_PRIMARY);
+        body.add(tabs, BorderLayout.CENTER);
+        dlg.add(body, BorderLayout.CENTER);
+
+        // ---- Nút đóng ----
+        JButton btnClose = UITheme.createSecondaryButton("Đóng");
+        btnClose.addActionListener(e -> dlg.dispose());
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, UITheme.PAD_MD, UITheme.PAD_SM));
+        footer.setBackground(UITheme.BG_PRIMARY);
+        footer.setBorder(new EmptyBorder(0, 0, UITheme.PAD_SM, 0));
+        footer.add(btnClose);
+        dlg.add(footer, BorderLayout.SOUTH);
+
+        dlg.setVisible(true);
+    }
+
+    /**
+     * Xây dựng tab xuất báo cáo cho từng loại dữ liệu.
+     * @param type  "books" | "readers" | "borrows" | "monthly"
+     */
+    private JPanel buildExportTab(JDialog parent, String type) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBackground(UITheme.BG_WHITE);
+        panel.setBorder(new EmptyBorder(UITheme.PAD_MD, UITheme.PAD_MD, UITheme.PAD_MD, UITheme.PAD_MD));
+
+        // Mô tả
+        String desc = switch (type) {
+            case "books"   -> "Xuất toàn bộ danh sách sách trong thư viện (ISBN, tên sách, tác giả, thể loại, số bản...)";
+            case "readers" -> "Xuất toàn bộ danh sách độc giả (mã thẻ, họ tên, ngày sinh, liên hệ, trạng thái...)";
+            case "borrows" -> "Xuất toàn bộ lịch sử phiếu mượn (thông tin sách, độc giả, ngày mượn, trạng thái, tiền phạt...)";
+            case "monthly" -> "Xuất báo cáo thống kê: lượt mượn theo tháng, top sách mượn nhiều nhất và danh sách quá hạn.";
+            default        -> "";
+        };
+        JTextArea descArea = new JTextArea(desc);
+        descArea.setFont(UITheme.FONT_SMALL);
+        descArea.setForeground(UITheme.TEXT_SECONDARY);
+        descArea.setBackground(new Color(0xF0F4FF));
+        descArea.setLineWrap(true);
+        descArea.setWrapStyleWord(true);
+        descArea.setEditable(false);
+        descArea.setBorder(new EmptyBorder(UITheme.PAD_SM, UITheme.PAD_SM, UITheme.PAD_SM, UITheme.PAD_SM));
+        descArea.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+        panel.add(descArea);
+        panel.add(Box.createVerticalStrut(UITheme.PAD_MD));
+
+        // Chọn năm (chỉ cho tab thống kê)
+        JSpinner yearSpinner = null;
+        if ("monthly".equals(type)) {
+            JPanel yearRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            yearRow.setBackground(UITheme.BG_WHITE);
+            yearRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+            JLabel lbYear = new JLabel("Năm thống kê:  ");
+            lbYear.setFont(UITheme.FONT_BODY);
+            yearSpinner = new JSpinner(new SpinnerNumberModel(
+                Year.now().getValue(), 2000, Year.now().getValue(), 1));
+            yearSpinner.setFont(UITheme.FONT_BODY);
+            yearSpinner.setPreferredSize(new Dimension(90, 30));
+            yearRow.add(lbYear);
+            yearRow.add(yearSpinner);
+            panel.add(yearRow);
+            panel.add(Box.createVerticalStrut(UITheme.PAD_MD));
+        }
+
+        // Trạng thái
+        JLabel statusLbl = new JLabel(" ");
+        statusLbl.setFont(UITheme.FONT_SMALL);
+        statusLbl.setForeground(UITheme.COLOR_SUCCESS);
+        statusLbl.setAlignmentX(LEFT_ALIGNMENT);
+
+        panel.add(Box.createVerticalGlue());
+        panel.add(statusLbl);
+        panel.add(Box.createVerticalStrut(UITheme.PAD_SM));
+
+        // Nút xuất
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, UITheme.PAD_SM, 0));
+        btnRow.setBackground(UITheme.BG_WHITE);
+        btnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+
+        JButton btnExcel = UITheme.createPrimaryButton("⬇  Xuất Excel (.xlsx)");
+        JButton btnCsv   = UITheme.createSecondaryButton("⬇  Xuất CSV (.csv)");
+
+        final JSpinner fYearSpinner = yearSpinner;
+
+        btnExcel.addActionListener(e -> {
+            int year = (fYearSpinner != null)
+                ? (int) fYearSpinner.getValue()
+                : Year.now().getValue();
+            doExport(parent, type, "xlsx", year, statusLbl);
+        });
+
+        btnCsv.addActionListener(e -> {
+            int year = (fYearSpinner != null)
+                ? (int) fYearSpinner.getValue()
+                : Year.now().getValue();
+            doExport(parent, type, "csv", year, statusLbl);
+        });
+
+        btnRow.add(btnExcel);
+        btnRow.add(btnCsv);
+        panel.add(btnRow);
+
+        return panel;
+    }
+
+    /** Thực hiện xuất file: mở JFileChooser, gọi ExportService, thông báo kết quả. */
+    private void doExport(JDialog parent, String type, String ext, int year, JLabel statusLbl) {
+        // Tên file gợi ý
+        String prefix = switch (type) {
+            case "books"   -> "DanhSachSach";
+            case "readers" -> "DanhSachDocGia";
+            case "borrows" -> "PhieuMuon";
+            case "monthly" -> "BaoCaoThongKe_" + year;
+            default        -> "Export";
+        };
+        String defName = exportService.defaultFileName(prefix, ext);
+
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Lưu file xuất");
+        fc.setSelectedFile(new File(System.getProperty("user.home"), defName));
+        if ("xlsx".equals(ext)) {
+            fc.setFileFilter(new FileNameExtensionFilter("Excel Workbook (*.xlsx)", "xlsx"));
+        } else {
+            fc.setFileFilter(new FileNameExtensionFilter("CSV File (*.csv)", "csv"));
+        }
+
+        if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) return;
+
+        File file = fc.getSelectedFile();
+        // Đảm bảo đúng extension
+        if (!file.getName().toLowerCase().endsWith("." + ext)) {
+            file = new File(file.getAbsolutePath() + "." + ext);
+        }
+
+        final File finalFile = file;
+        statusLbl.setText("⏳  Đang xuất...");
+        statusLbl.setForeground(UITheme.COLOR_WARNING);
+
+        SwingWorker<File, Void> worker = new SwingWorker<>() {
+            @Override protected File doInBackground() throws Exception {
+                return switch (type + "|" + ext) {
+                    case "books|xlsx"   -> exportService.exportBooksToExcel(finalFile);
+                    case "books|csv"    -> exportService.exportBooksToCsv(finalFile);
+                    case "readers|xlsx" -> exportService.exportReadersToExcel(finalFile);
+                    case "readers|csv"  -> exportService.exportReadersToCsv(finalFile);
+                    case "borrows|xlsx" -> exportService.exportBorrowsToExcel(finalFile);
+                    case "borrows|csv"  -> exportService.exportBorrowsToCsv(finalFile);
+                    case "monthly|xlsx" -> exportService.exportMonthlyReportToExcel(finalFile, year);
+                    case "monthly|csv"  -> exportService.exportMonthlyReportToCsv(finalFile, year);
+                    default             -> throw new IllegalArgumentException("Unknown export type");
+                };
+            }
+
+            @Override protected void done() {
+                try {
+                    File out = get();
+                    statusLbl.setText("✔  Xuất thành công: " + out.getName());
+                    statusLbl.setForeground(UITheme.COLOR_SUCCESS);
+
+                    int choice = JOptionPane.showConfirmDialog(
+                        parent,
+                        "Xuất file thành công!\n" + out.getAbsolutePath()
+                            + "\n\nBạn có muốn mở file ngay không?",
+                        "Xuất Thành Công",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.INFORMATION_MESSAGE);
+
+                    if (choice == JOptionPane.YES_OPTION) {
+                        ExportService.openFile(out);
+                    }
+                } catch (Exception ex) {
+                    statusLbl.setText("✘  Lỗi: " + ex.getMessage());
+                    statusLbl.setForeground(UITheme.COLOR_DANGER);
+                    UITheme.showError(ReportPanel.this,
+                        "Lỗi khi xuất file:\n" + ex.getMessage());
+                }
+            }
+        };
+        worker.execute();
     }
 
     // ================================================================

@@ -56,6 +56,13 @@
       <artifactId>openpdf</artifactId>
       <version>1.3.39</version>
     </dependency>
+
+    <!-- ===== EXCEL EXPORT (Apache POI) ===== -->
+    <dependency>
+      <groupId>org.apache.poi</groupId>
+      <artifactId>poi-ooxml</artifactId>
+      <version>5.2.5</version>
+    </dependency>
   </dependencies>
 
   <build>

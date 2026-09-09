@@ -14,6 +14,15 @@ public class DatabaseInitializer {
     //  DDL - Tạo bảng
     // ============================================================
 
+    private static final String CREATE_TABLE_CATEGORIES = """
+            CREATE TABLE IF NOT EXISTS categories (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    UNIQUE NOT NULL COLLATE NOCASE,
+                description TEXT,
+                created_at  TEXT    DEFAULT (datetime('now','localtime'))
+            )
+            """;
+
     private static final String CREATE_TABLE_BOOKS = """
             CREATE TABLE IF NOT EXISTS books (
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,12 +89,13 @@ public class DatabaseInitializer {
     // ============================================================
 
     private static final String[] CREATE_INDEXES = {
-        "CREATE INDEX IF NOT EXISTS idx_books_title    ON books(title)",
-        "CREATE INDEX IF NOT EXISTS idx_books_author   ON books(author)",
-        "CREATE INDEX IF NOT EXISTS idx_books_category ON books(category)",
-        "CREATE INDEX IF NOT EXISTS idx_borrows_book   ON borrows(book_id)",
-        "CREATE INDEX IF NOT EXISTS idx_borrows_reader ON borrows(reader_id)",
-        "CREATE INDEX IF NOT EXISTS idx_borrows_status ON borrows(status)",
+        "CREATE INDEX IF NOT EXISTS idx_books_title      ON books(title)",
+        "CREATE INDEX IF NOT EXISTS idx_books_author     ON books(author)",
+        "CREATE INDEX IF NOT EXISTS idx_books_category   ON books(category)",
+        "CREATE INDEX IF NOT EXISTS idx_categories_name  ON categories(name)",
+        "CREATE INDEX IF NOT EXISTS idx_borrows_book     ON borrows(book_id)",
+        "CREATE INDEX IF NOT EXISTS idx_borrows_reader   ON borrows(reader_id)",
+        "CREATE INDEX IF NOT EXISTS idx_borrows_status   ON borrows(status)",
     };
 
     // ============================================================
@@ -103,6 +113,20 @@ public class DatabaseInitializer {
             INSERT OR IGNORE INTO users (username, password, full_name, role, active)
             VALUES ('thuthu', 'thuthu123', 'Nguyễn Thị Thu', 'LIBRARIAN', 1)
             """;
+
+    // Dữ liệu mẫu thể loại
+    private static final String[] INSERT_DEFAULT_CATEGORIES = {
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Thiếu nhi', 'Sách dành cho thiếu nhi, truyện tranh, đồng thoại')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Văn học', 'Tiểu thuyết, truyện ngắn, thơ ca, văn học trong và ngoài nước')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Công nghệ', 'Khoa học máy tính, lập trình, công nghệ thông tin')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Triết học', 'Tư tưởng triết học, đạo đức học, nhân sinh quan')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Kỹ năng sống', 'Phát triển bản thân, kỹ năng mềm, tư duy thành công')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Khoa học', 'Khoa học tự nhiên, vũ trụ, sinh học, vật lý')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Lịch sử', 'Lịch sử Việt Nam và thế giới, tư liệu lịch sử')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Kinh tế', 'Kinh doanh, tài chính, quản trị, khởi nghiệp')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Ngoại ngữ', 'Giáo trình, từ điển, sách học ngoại ngữ')",
+        "INSERT OR IGNORE INTO categories (name, description) VALUES ('Nghệ thuật', 'Hội họa, âm nhạc, nhiếp ảnh, kiến trúc')"
+    };
 
     // Dữ liệu mẫu sách
     private static final String[] INSERT_SAMPLE_BOOKS = {
@@ -190,6 +214,7 @@ public class DatabaseInitializer {
     /** Tạo tất cả bảng. */
     private static void createTables(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
+            stmt.execute(CREATE_TABLE_CATEGORIES);
             stmt.execute(CREATE_TABLE_BOOKS);
             stmt.execute(CREATE_TABLE_READERS);
             stmt.execute(CREATE_TABLE_BORROWS);
@@ -200,6 +225,12 @@ public class DatabaseInitializer {
                 stmt.execute("ALTER TABLE borrows ADD COLUMN renew_count INTEGER DEFAULT 0");
             } catch (SQLException ignored) {
                 // Cột đã tồn tại
+            }
+
+            // Migration: đồng bộ các thể loại hiện có trong bảng books vào bảng categories nếu chưa có
+            try {
+                stmt.execute("INSERT OR IGNORE INTO categories (name) SELECT DISTINCT TRIM(category) FROM books WHERE category IS NOT NULL AND TRIM(category) != ''");
+            } catch (SQLException ignored) {
             }
 
             System.out.println("[DB] Tạo bảng thành công.");
@@ -216,12 +247,15 @@ public class DatabaseInitializer {
         }
     }
 
-    /** Chèn dữ liệu người dùng mặc định. */
+    /** Chèn dữ liệu người dùng và thể loại mặc định. */
     private static void insertDefaultData(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(INSERT_DEFAULT_ADMIN);
             stmt.execute(INSERT_DEFAULT_LIBRARIAN);
-            System.out.println("[DB] Dữ liệu người dùng mặc định đã được tạo.");
+            for (String sql : INSERT_DEFAULT_CATEGORIES) {
+                stmt.execute(sql);
+            }
+            System.out.println("[DB] Dữ liệu mặc định đã được tạo.");
         }
     }
 
