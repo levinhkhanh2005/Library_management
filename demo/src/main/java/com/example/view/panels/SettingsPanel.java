@@ -47,7 +47,15 @@ public class SettingsPanel extends JPanel implements MainFrame.Refreshable {
         content.setBackground(UITheme.BG_PRIMARY);
 
         content.add(buildAccountSection());
-        content.add(buildRightColumn());
+
+        JScrollPane scrollRight = new JScrollPane(buildRightColumn());
+        scrollRight.setBorder(BorderFactory.createEmptyBorder());
+        scrollRight.setOpaque(false);
+        scrollRight.getViewport().setOpaque(false);
+        scrollRight.getVerticalScrollBar().setUnitIncrement(16);
+        scrollRight.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+        content.add(scrollRight);
         return content;
     }
 
