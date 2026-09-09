@@ -59,7 +59,9 @@ public class EmailService {
             Session session = Session.getInstance(props, new Authenticator() {
                 @Override
                 protected PasswordAuthentication getPasswordAuthentication() {
-                    return new PasswordAuthentication(config.getUsername(), config.getPassword());
+                    String user = config.getUsername() != null ? config.getUsername().trim() : "";
+                    String pass = config.getPassword() != null ? config.getPassword().replace(" ", "").trim() : "";
+                    return new PasswordAuthentication(user, pass);
                 }
             });
 

@@ -137,6 +137,16 @@ public class DatabaseInitializer {
             VALUES ('thuthu', 'thuthu123', 'Nguyễn Thị Thu', 'LIBRARIAN', 1)
             """;
 
+    /** Cấu hình SMTP mặc định cho Gmail. */
+    private static final String[] INSERT_DEFAULT_SMTP = {
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.host', 'smtp.gmail.com')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.port', '587')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.username', 'kle45313@gmail.com')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.password', 'aozq dvjs yfpu kvrt')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.from_name', 'Thư Viện Nguyễn Huệ')",
+        "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.tls', 'true')",
+    };
+
     // Dữ liệu mẫu thể loại
     private static final String[] INSERT_DEFAULT_CATEGORIES = {
         "INSERT OR IGNORE INTO categories (name, description) VALUES ('Thiếu nhi', 'Sách dành cho thiếu nhi, truyện tranh, đồng thoại')",
@@ -272,12 +282,15 @@ public class DatabaseInitializer {
         }
     }
 
-    /** Chèn dữ liệu người dùng và thể loại mặc định. */
+    /** Chèn dữ liệu người dùng, thể loại và SMTP mặc định. */
     private static void insertDefaultData(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(INSERT_DEFAULT_ADMIN);
             stmt.execute(INSERT_DEFAULT_LIBRARIAN);
             for (String sql : INSERT_DEFAULT_CATEGORIES) {
+                stmt.execute(sql);
+            }
+            for (String sql : INSERT_DEFAULT_SMTP) {
                 stmt.execute(sql);
             }
             System.out.println("[DB] Dữ liệu mặc định đã được tạo.");
