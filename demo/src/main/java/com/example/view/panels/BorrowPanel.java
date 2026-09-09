@@ -2,9 +2,11 @@ package com.example.view.panels;
 
 import com.example.model.Borrow;
 import com.example.service.BorrowService;
+import com.example.service.EmailService;
 import com.example.view.MainFrame;
 import com.example.view.UITheme;
 import com.example.view.dialogs.BorrowDialog;
+import com.example.view.dialogs.OverdueReminderDialog;
 import com.example.view.dialogs.ReceiptPreviewDialog;
 
 import javax.swing.*;
@@ -26,7 +28,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
     private DefaultTableModel tableModel;
     private JTextField        searchField;
     private JLabel            statusLabel;
-    private JButton           btnReturn, btnRenew, btnLost, btnExportPdf, btnDelete;
+    private JButton           btnReturn, btnRenew, btnLost, btnExportPdf, btnDelete, btnEmailRemind;
 
     private static final String[] COLUMNS = {
         "#", "Mã Phiếu", "Tên Sách", "Độc Giả", "Mã Thẻ",
@@ -81,13 +83,16 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         btnRenew          = UITheme.createSecondaryButton("⏳  Gia Hạn");
         btnLost           = UITheme.createDangerButton("⚠  Báo Mất");
         btnExportPdf      = UITheme.createSecondaryButton("📄  Xuất PDF");
+        btnEmailRemind    = UITheme.createSecondaryButton("📧  Nhắc Email");
         btnDelete         = UITheme.createDangerButton("✕  Xóa Phiếu");
+        JButton btnOverdueList = UITheme.createSecondaryButton("🔔  DS Quá Hạn");
         JButton btnRefresh= UITheme.createSecondaryButton("↺  Làm Mới");
 
         btnReturn.setEnabled(false);
         btnRenew.setEnabled(false);
         btnLost.setEnabled(false);
         btnExportPdf.setEnabled(false);
+        btnEmailRemind.setEnabled(false);
         btnDelete.setEnabled(false);
 
         leftGroup.add(btnNew);
@@ -95,7 +100,9 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         leftGroup.add(btnRenew);
         leftGroup.add(btnLost);
         leftGroup.add(btnExportPdf);
+        leftGroup.add(btnEmailRemind);
         leftGroup.add(btnDelete);
+        leftGroup.add(btnOverdueList);
         leftGroup.add(btnRefresh);
         toolbar.add(leftGroup, BorderLayout.WEST);
 
@@ -132,6 +139,13 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         searchField.addActionListener(e ->
             loadData("Tất cả", searchField.getText()));
         btnAdvancedFilter.addActionListener(e -> openAdvancedFilterDialog());
+        btnEmailRemind.addActionListener(e -> sendEmailReminder());
+        btnOverdueList.addActionListener(e -> {
+            OverdueReminderDialog dialog = new OverdueReminderDialog(
+                SwingUtilities.getWindowAncestor(this));
+            dialog.setVisible(true);
+            loadData("Tất cả", null);
+        });
 
         return toolbar;
     }
@@ -219,6 +233,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             btnReturn.setEnabled(isBorrowing || isOverdue);
             btnRenew.setEnabled(isBorrowing || isOverdue);
             btnLost.setEnabled(isBorrowing || isOverdue);
+            btnEmailRemind.setEnabled(isOverdue);
             btnExportPdf.setEnabled(true);
             btnDelete.setEnabled(true);
         });
@@ -620,6 +635,57 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         } catch (Exception ex) {
             UITheme.showError(this, "Lỗi báo mất sách:\n" + ex.getMessage());
         }
+    }
+
+    private void sendEmailReminder() {
+        int row = table.getSelectedRow();
+        if (row < 0) return;
+
+        int modelRow = table.convertRowIndexToModel(row);
+        String statusText = (String) tableModel.getValueAt(modelRow, 9);
+        if (!statusText.equals(Borrow.Status.OVERDUE.getLabel())) {
+            UITheme.showWarning(this, "Chỉ có thể gửi nhắc nhở cho phiếu Quá hạn.");
+            return;
+        }
+
+        String borrowIdStr = (String) tableModel.getValueAt(modelRow, 1);
+        int borrowId;
+        try {
+            borrowId = Integer.parseInt(borrowIdStr.replace("PM-", ""));
+        } catch (NumberFormatException e) {
+            UITheme.showError(this, "Mã phiếu không hợp lệ.");
+            return;
+        }
+
+        String bookTitle = (String) tableModel.getValueAt(modelRow, 2);
+        String readerName = (String) tableModel.getValueAt(modelRow, 3);
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Gửi email nhắc nhở quá hạn?\n"
+            + "📖 Sách: " + bookTitle + "\n"
+            + "👤 Độc giả: " + readerName,
+            "📧 Xác nhận gửi Email", JOptionPane.OK_CANCEL_OPTION);
+
+        if (confirm != JOptionPane.OK_OPTION) return;
+
+        SwingWorker<String, Void> worker = new SwingWorker<>() {
+            @Override protected String doInBackground() {
+                return new EmailService().sendOverdueReminder(borrowId);
+            }
+            @Override protected void done() {
+                try {
+                    String result = get();
+                    if (result.startsWith("✅")) {
+                        UITheme.showSuccess(BorrowPanel.this, result);
+                    } else {
+                        UITheme.showWarning(BorrowPanel.this, result);
+                    }
+                } catch (Exception ex) {
+                    UITheme.showError(BorrowPanel.this, "Lỗi: " + ex.getMessage());
+                }
+            }
+        };
+        worker.execute();
     }
 
     private void openAdvancedFilterDialog() {

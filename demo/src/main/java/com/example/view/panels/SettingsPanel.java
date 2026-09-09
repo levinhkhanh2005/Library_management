@@ -1,7 +1,10 @@
 package com.example.view.panels;
 
 import com.example.model.User;
+import com.example.model.EmailConfig;
 import com.example.service.AuthService;
+import com.example.service.EmailService;
+import com.example.dao.SystemSettingDAO;
 import com.example.util.DatabaseConnection;
 import com.example.view.MainFrame;
 import com.example.view.UITheme;
@@ -161,6 +164,8 @@ public class SettingsPanel extends JPanel implements MainFrame.Refreshable {
 
         col.add(buildChangePasswordCard());
         col.add(Box.createVerticalStrut(UITheme.PAD_MD));
+        col.add(buildSmtpConfigCard());
+        col.add(Box.createVerticalStrut(UITheme.PAD_MD));
         col.add(buildSysInfoCard());
         return col;
     }
@@ -254,6 +259,139 @@ public class SettingsPanel extends JPanel implements MainFrame.Refreshable {
             val.setForeground(UITheme.TEXT_PRIMARY);
             card.add(val, g);
         }
+        return card;
+    }
+
+    // ================================================================
+    //  Card: Cấu hình SMTP Email
+    // ================================================================
+
+    private JPanel buildSmtpConfigCard() {
+        JPanel card = createCard("📧  Cấu Hình Email Gửi Thông Báo (SMTP)");
+        card.setLayout(new GridBagLayout());
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets  = new Insets(4, 8, 4, 8);
+        g.fill    = GridBagConstraints.HORIZONTAL;
+        g.weightx = 1.0;
+
+        JTextField fHost     = UITheme.createTextField("smtp.gmail.com");
+        JTextField fPort     = UITheme.createTextField("587");
+        JTextField fUsername = UITheme.createTextField("email@gmail.com");
+        JPasswordField fPassword = UITheme.createPasswordField("Mật khẩu ứng dụng (App Password)");
+        JTextField fFromName = UITheme.createTextField("Thư Viện Nguyễn Huệ");
+        JCheckBox cbTls      = new JCheckBox("Bật STARTTLS", true);
+        cbTls.setFont(UITheme.FONT_BODY);
+        cbTls.setOpaque(false);
+
+        // Load cấu hình hiện tại
+        try {
+            SystemSettingDAO dao = new SystemSettingDAO();
+            EmailConfig cfg = dao.loadEmailConfig();
+            fHost.setText(cfg.getHost());
+            fPort.setText(String.valueOf(cfg.getPort()));
+            fUsername.setText(cfg.getUsername());
+            fPassword.setText(cfg.getPassword());
+            fFromName.setText(cfg.getFromName());
+            cbTls.setSelected(cfg.isStartTls());
+        } catch (Exception ignored) {}
+
+        int row = 0;
+        g.gridy = row++; card.add(fieldLabel("SMTP Host"), g);
+        g.gridy = row++; card.add(fHost, g);
+        g.gridy = row++; card.add(fieldLabel("Port"), g);
+        g.gridy = row++; card.add(fPort, g);
+        g.gridy = row++; card.add(fieldLabel("Email gửi"), g);
+        g.gridy = row++; card.add(fUsername, g);
+        g.gridy = row++; card.add(fieldLabel("Mật khẩu ứng dụng"), g);
+        g.gridy = row++; card.add(fPassword, g);
+        g.gridy = row++; card.add(fieldLabel("Tên người gửi"), g);
+        g.gridy = row++; card.add(fFromName, g);
+        g.gridy = row++; card.add(cbTls, g);
+
+        // Nút hành động
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
+        btnPanel.setOpaque(false);
+        JButton btnSave = UITheme.createPrimaryButton("💾  Lưu Cấu Hình");
+        JButton btnTest = UITheme.createSuccessButton("⚡  Gửi Thử Email");
+        btnPanel.add(btnSave);
+        btnPanel.add(btnTest);
+        g.gridy = row;
+        g.insets = new Insets(10, 8, 6, 8);
+        card.add(btnPanel, g);
+
+        // Lưu cấu hình
+        btnSave.addActionListener(e -> {
+            try {
+                EmailConfig cfg = new EmailConfig();
+                cfg.setHost(fHost.getText().trim());
+                cfg.setPort(Integer.parseInt(fPort.getText().trim()));
+                cfg.setUsername(fUsername.getText().trim());
+                cfg.setPassword(new String(fPassword.getPassword()));
+                cfg.setFromName(fFromName.getText().trim());
+                cfg.setStartTls(cbTls.isSelected());
+
+                new SystemSettingDAO().saveEmailConfig(cfg);
+                UITheme.showSuccess(this, "Đã lưu cấu hình SMTP thành công!");
+            } catch (NumberFormatException ex) {
+                UITheme.showWarning(this, "Port phải là số (ví dụ: 587).");
+            } catch (Exception ex) {
+                UITheme.showError(this, "Lỗi lưu cấu hình: " + ex.getMessage());
+            }
+        });
+
+        // Gửi thử
+        btnTest.addActionListener(e -> {
+            String testEmail = JOptionPane.showInputDialog(this,
+                "Nhập email nhận thử:", "Gửi Thử Email SMTP",
+                JOptionPane.QUESTION_MESSAGE);
+            if (testEmail == null || testEmail.isBlank()) return;
+
+            EmailConfig cfg = new EmailConfig();
+            cfg.setHost(fHost.getText().trim());
+            try {
+                cfg.setPort(Integer.parseInt(fPort.getText().trim()));
+            } catch (NumberFormatException ex) {
+                UITheme.showWarning(this, "Port không hợp lệ.");
+                return;
+            }
+            cfg.setUsername(fUsername.getText().trim());
+            cfg.setPassword(new String(fPassword.getPassword()));
+            cfg.setFromName(fFromName.getText().trim());
+            cfg.setStartTls(cbTls.isSelected());
+
+            if (!cfg.isValid()) {
+                UITheme.showWarning(this, "Vui lòng điền đầy đủ thông tin SMTP.");
+                return;
+            }
+
+            btnTest.setEnabled(false);
+            btnTest.setText("⏳ Đang gửi...");
+
+            SwingWorker<String, Void> worker = new SwingWorker<>() {
+                @Override protected String doInBackground() {
+                    return new EmailService().testConnection(cfg, testEmail);
+                }
+                @Override protected void done() {
+                    btnTest.setEnabled(true);
+                    btnTest.setText("⚡  Gửi Thử Email");
+                    try {
+                        String error = get();
+                        if (error == null) {
+                            UITheme.showSuccess(SettingsPanel.this,
+                                "✅ Gửi thành công! Kiểm tra hộp thư: " + testEmail);
+                        } else {
+                            UITheme.showError(SettingsPanel.this,
+                                "❌ Gửi thất bại: " + error);
+                        }
+                    } catch (Exception ex) {
+                        UITheme.showError(SettingsPanel.this,
+                            "Lỗi: " + ex.getMessage());
+                    }
+                }
+            };
+            worker.execute();
+        });
+
         return card;
     }
 

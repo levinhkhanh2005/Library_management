@@ -84,6 +84,29 @@ public class DatabaseInitializer {
             )
             """;
 
+    private static final String CREATE_TABLE_SYSTEM_SETTINGS = """
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """;
+
+    private static final String CREATE_TABLE_EMAIL_LOGS = """
+            CREATE TABLE IF NOT EXISTS email_logs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                borrow_id       INTEGER,
+                reader_id       INTEGER,
+                recipient_email TEXT,
+                subject         TEXT,
+                content         TEXT,
+                status          TEXT    NOT NULL DEFAULT 'SUCCESS',
+                error_message   TEXT,
+                sent_at         TEXT    DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (borrow_id) REFERENCES borrows(id),
+                FOREIGN KEY (reader_id) REFERENCES readers(id)
+            )
+            """;
+
     // ============================================================
     //  Index để tăng tốc truy vấn
     // ============================================================
@@ -219,6 +242,8 @@ public class DatabaseInitializer {
             stmt.execute(CREATE_TABLE_READERS);
             stmt.execute(CREATE_TABLE_BORROWS);
             stmt.execute(CREATE_TABLE_USERS);
+            stmt.execute(CREATE_TABLE_SYSTEM_SETTINGS);
+            stmt.execute(CREATE_TABLE_EMAIL_LOGS);
 
             // Migration: thêm cột renew_count nếu DB đã tồn tại từ phiên bản trước
             try {
