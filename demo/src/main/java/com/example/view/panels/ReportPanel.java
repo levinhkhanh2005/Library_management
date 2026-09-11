@@ -1,6 +1,7 @@
 package com.example.view.panels;
 
 import com.example.model.Borrow;
+import com.example.model.CategoryBookStat;
 import com.example.service.BookService;
 import com.example.service.BorrowService;
 import com.example.service.ExportService;
@@ -38,6 +39,8 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
     private int[]         monthlyData = new int[12];
     private int           chartYear   = Year.now().getValue();
     private JPanel        chartPanel;
+    private PieChartPanel categoryPieChart;
+    private List<CategoryBookStat> categoryStats = new java.util.ArrayList<>();
 
     // Tables
     private DefaultTableModel topBooksModel;
@@ -305,17 +308,24 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
         content.add(buildStatRow());
         content.add(Box.createVerticalStrut(UITheme.PAD_MD));
 
-        // ---- Hàng 2: Biểu đồ + Top sách ----
+        // ---- Hàng 2: Biểu đồ cột mượn theo tháng & Biểu đồ tròn thể loại ----
         JPanel row2 = new JPanel(new GridLayout(1, 2, UITheme.PAD_MD, 0));
         row2.setBackground(UITheme.BG_PRIMARY);
-        row2.setMaximumSize(new Dimension(Integer.MAX_VALUE, 300));
+        row2.setMaximumSize(new Dimension(Integer.MAX_VALUE, 310));
+        row2.setPreferredSize(new Dimension(0, 310));
         row2.add(buildChartCard());
-        row2.add(buildTopBooksCard());
+        row2.add(buildCategoryPieChartCard());
         content.add(row2);
         content.add(Box.createVerticalStrut(UITheme.PAD_MD));
 
-        // ---- Hàng 3: DS quá hạn ----
-        content.add(buildOverdueCard());
+        // ---- Hàng 3: Top sách + DS quá hạn ----
+        JPanel row3 = new JPanel(new GridLayout(1, 2, UITheme.PAD_MD, 0));
+        row3.setBackground(UITheme.BG_PRIMARY);
+        row3.setMaximumSize(new Dimension(Integer.MAX_VALUE, 270));
+        row3.setPreferredSize(new Dimension(0, 270));
+        row3.add(buildTopBooksCard());
+        row3.add(buildOverdueCard());
+        content.add(row3);
 
         JScrollPane sp = new JScrollPane(content);
         sp.setBorder(null);
@@ -622,6 +632,39 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
         return card;
     }
 
+    // ---- Biểu đồ tròn phân bố thể loại sách ----
+    private JPanel buildCategoryPieChartCard() {
+        JPanel card = new JPanel(new BorderLayout());
+        card.setBackground(UITheme.BG_WHITE);
+        card.setBorder(UITheme.createCardBorder());
+
+        JPanel cardHeader = new JPanel(new BorderLayout());
+        cardHeader.setBackground(UITheme.BG_WHITE);
+        cardHeader.setBorder(new EmptyBorder(UITheme.PAD_MD, UITheme.PAD_MD, UITheme.PAD_SM, UITheme.PAD_MD));
+
+        JLabel title = new JLabel("🍩  Phân Bố Thể Loại Sách (%)");
+        title.setFont(UITheme.FONT_BOLD);
+        title.setForeground(UITheme.TEXT_PRIMARY);
+        cardHeader.add(title, BorderLayout.WEST);
+
+        JButton btnDetail = new JButton("Chi Tiết ↗");
+        btnDetail.setFont(UITheme.FONT_SMALL);
+        btnDetail.setFocusPainted(false);
+        btnDetail.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btnDetail.addActionListener(e -> {
+            com.example.view.dialogs.CategoryDistributionDialog dlg =
+                new com.example.view.dialogs.CategoryDistributionDialog((Frame) SwingUtilities.getWindowAncestor(this), null);
+            dlg.setVisible(true);
+        });
+        cardHeader.add(btnDetail, BorderLayout.EAST);
+        card.add(cardHeader, BorderLayout.NORTH);
+
+        categoryPieChart = new PieChartPanel();
+        card.add(categoryPieChart, BorderLayout.CENTER);
+
+        return card;
+    }
+
     // ================================================================
     //  Load dữ liệu
     // ================================================================
@@ -644,6 +687,7 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
                 topBooks      = borrowService.getTopBorrowedBooks(10);
                 overdue       = borrowService.getOverdueBorrows();
                 monthlyData   = borrowService.getBorrowCountByMonth(chartYear);
+                categoryStats = bookService.getCategoryDistribution(true);
                 return null;
             }
 
@@ -687,6 +731,7 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
 
                     // Repaint biểu đồ
                     if (chartPanel != null) chartPanel.repaint();
+                    if (categoryPieChart != null) categoryPieChart.setData(categoryStats, true);
 
                 } catch (Exception ex) {
                     UITheme.showError(ReportPanel.this, "Lỗi tải báo cáo:\n" + ex.getMessage());
