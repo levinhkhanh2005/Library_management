@@ -36,7 +36,10 @@ replay_pid*
 # SQLite runtime / temp files
 *.db-shm
 *.db-wal
-demo/data/*.db
+*.db
+data/
+demo/data/
+
 
 # IDE - IntelliJ IDEA
 .idea/
