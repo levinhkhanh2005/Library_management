@@ -5,6 +5,7 @@ import com.example.dao.BorrowDAO;
 import com.example.dao.ReaderDAO;
 import com.example.model.Book;
 import com.example.model.Borrow;
+import com.example.model.BorrowStats;
 import com.example.model.Reader;
 
 import java.sql.Connection;
@@ -382,6 +383,34 @@ public class BorrowService {
 
     public int[] getBorrowCountByMonth(int year) throws SQLException {
         return borrowDAO.getBorrowCountByMonth(year);
+    }
+
+    /**
+     * Lấy tổng hợp số liệu thống kê mượn và trả sách.
+     */
+    public BorrowStats getBorrowStats() throws SQLException {
+        return borrowDAO.getBorrowStats();
+    }
+
+    /**
+     * Lấy số liệu thống kê mượn và trả sách theo khoảng ngày.
+     */
+    public BorrowStats getBorrowStatsByPeriod(String fromDate, String toDate) throws SQLException {
+        return borrowDAO.getBorrowStatsByPeriod(fromDate, toDate);
+    }
+
+    /**
+     * Lấy thống kê số lượng mượn và trả theo thể loại sách.
+     */
+    public List<Object[]> getBorrowStatsByCategory() throws SQLException {
+        return borrowDAO.getBorrowStatsByCategory();
+    }
+
+    /**
+     * Lấy top độc giả mượn trả nhiều nhất.
+     */
+    public List<Object[]> getTopReadersByBorrows(int limit) throws SQLException {
+        return borrowDAO.getTopReadersByBorrows(limit);
     }
 
     // ===================== Tính tiền phạt =====================

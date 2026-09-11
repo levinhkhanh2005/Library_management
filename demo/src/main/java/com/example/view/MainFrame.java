@@ -170,6 +170,7 @@ public class MainFrame extends JFrame {
             getCardComponent(key) == null) {
 
             JPanel panel = createPanel(item);
+            panel.setName(key);
             contentArea.add(panel, key);
         } else {
             // Refresh dữ liệu khi quay lại panel đã mở

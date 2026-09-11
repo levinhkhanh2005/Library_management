@@ -107,6 +107,18 @@ public class DatabaseInitializer {
             )
             """;
 
+    private static final String CREATE_TABLE_AUTHORS = """
+            CREATE TABLE IF NOT EXISTS authors (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    UNIQUE NOT NULL COLLATE NOCASE,
+                birth_year  INTEGER,
+                death_year  INTEGER,
+                nationality TEXT,
+                biography   TEXT,
+                created_at  TEXT    DEFAULT (datetime('now','localtime'))
+            )
+            """;
+
     // ============================================================
     //  Index để tăng tốc truy vấn
     // ============================================================
@@ -116,6 +128,7 @@ public class DatabaseInitializer {
         "CREATE INDEX IF NOT EXISTS idx_books_author     ON books(author)",
         "CREATE INDEX IF NOT EXISTS idx_books_category   ON books(category)",
         "CREATE INDEX IF NOT EXISTS idx_categories_name  ON categories(name)",
+        "CREATE INDEX IF NOT EXISTS idx_authors_name     ON authors(name)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_book     ON borrows(book_id)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_reader   ON borrows(reader_id)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_status   ON borrows(status)",
@@ -237,6 +250,7 @@ public class DatabaseInitializer {
 
             System.out.println("[DB] Khởi tạo cơ sở dữ liệu hoàn thành!");
             System.out.println("[DB] File DB: " + DatabaseConnection.getDatabasePath());
+            DatabaseConnection.syncMirrors();
 
         } catch (SQLException e) {
             System.err.println("[DB] Lỗi khởi tạo DB: " + e.getMessage());
@@ -254,6 +268,7 @@ public class DatabaseInitializer {
             stmt.execute(CREATE_TABLE_USERS);
             stmt.execute(CREATE_TABLE_SYSTEM_SETTINGS);
             stmt.execute(CREATE_TABLE_EMAIL_LOGS);
+            stmt.execute(CREATE_TABLE_AUTHORS);
 
             // Migration: thêm cột renew_count nếu DB đã tồn tại từ phiên bản trước
             try {
@@ -265,6 +280,12 @@ public class DatabaseInitializer {
             // Migration: đồng bộ các thể loại hiện có trong bảng books vào bảng categories nếu chưa có
             try {
                 stmt.execute("INSERT OR IGNORE INTO categories (name) SELECT DISTINCT TRIM(category) FROM books WHERE category IS NOT NULL AND TRIM(category) != ''");
+            } catch (SQLException ignored) {
+            }
+
+            // Migration: đồng bộ các tác giả hiện có trong bảng books vào bảng authors nếu chưa có
+            try {
+                stmt.execute("INSERT OR IGNORE INTO authors (name) SELECT DISTINCT TRIM(author) FROM books WHERE author IS NOT NULL AND TRIM(author) != ''");
             } catch (SQLException ignored) {
             }
 
@@ -282,12 +303,24 @@ public class DatabaseInitializer {
         }
     }
 
-    /** Chèn dữ liệu người dùng, thể loại và SMTP mặc định. */
+    /** Dữ liệu mẫu tác giả */
+    private static final String[] INSERT_DEFAULT_AUTHORS = {
+        "INSERT OR IGNORE INTO authors (name, birth_year, death_year, nationality, biography) VALUES ('Tô Hoài', 1920, 2014, 'Việt Nam', 'Nhà văn lớn của nền văn học hiện đại Việt Nam, tác giả Dế Mèn Phiêu Lưu Ký')",
+        "INSERT OR IGNORE INTO authors (name, birth_year, death_year, nationality, biography) VALUES ('Vũ Trọng Phụng', 1912, 1939, 'Việt Nam', 'Nhà văn, nhà báo trào phúng xuất sắc của văn học Việt Nam')",
+        "INSERT OR IGNORE INTO authors (name, birth_year, death_year, nationality, biography) VALUES ('Paulo Coelho', 1947, NULL, 'Brazil', 'Tiểu thuyết gia nổi tiếng người Brazil, tác giả cuốn Nhà Giả Kim')",
+        "INSERT OR IGNORE INTO authors (name, birth_year, death_year, nationality, biography) VALUES ('Dale Carnegie', 1888, 1955, 'Mỹ', 'Nhà văn và nhà thuyết trình người Mỹ, tác giả cuốn Đắc Nhân Tâm')",
+        "INSERT OR IGNORE INTO authors (name, birth_year, death_year, nationality, biography) VALUES ('Nguyễn Văn An', 1980, NULL, 'Việt Nam', 'Chuyên gia công nghệ thông tin và tác giả nhiều đầu sách lập trình')"
+    };
+
+    /** Chèn dữ liệu người dùng, thể loại, tác giả và SMTP mặc định. */
     private static void insertDefaultData(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(INSERT_DEFAULT_ADMIN);
             stmt.execute(INSERT_DEFAULT_LIBRARIAN);
             for (String sql : INSERT_DEFAULT_CATEGORIES) {
+                stmt.execute(sql);
+            }
+            for (String sql : INSERT_DEFAULT_AUTHORS) {
                 stmt.execute(sql);
             }
             for (String sql : INSERT_DEFAULT_SMTP) {

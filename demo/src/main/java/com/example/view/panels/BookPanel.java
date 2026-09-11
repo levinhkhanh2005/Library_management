@@ -1,9 +1,12 @@
 package com.example.view.panels;
 
+import com.example.model.Author;
 import com.example.model.Book;
+import com.example.service.AuthorService;
 import com.example.service.BookService;
 import com.example.view.MainFrame;
 import com.example.view.UITheme;
+import com.example.view.dialogs.AuthorManageDialog;
 import com.example.view.dialogs.BookDialog;
 import com.example.view.dialogs.CategoryManageDialog;
 
@@ -19,7 +22,8 @@ import java.util.List;
  */
 public class BookPanel extends JPanel implements MainFrame.Refreshable {
 
-    private final BookService bookService = new BookService();
+    private final BookService   bookService   = new BookService();
+    private final AuthorService authorService = new AuthorService();
 
     // UI Components
     private JTable          table;
@@ -84,6 +88,8 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnDelete = UITheme.createDangerButton("✕  Xóa");
         JButton btnCategory = UITheme.createSecondaryButton("📂  Thể Loại");
         btnCategory.setToolTipText("Quản lý danh mục thể loại sách");
+        JButton btnAuthor = UITheme.createSecondaryButton("✍️  Tác Giả");
+        btnAuthor.setToolTipText("Quản lý danh mục tác giả và đầu sách theo tác giả");
         JButton btnRefresh = UITheme.createSecondaryButton("↺  Làm Mới");
 
         btnEdit.setEnabled(false);
@@ -93,6 +99,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnGroup.add(btnEdit);
         btnGroup.add(btnDelete);
         btnGroup.add(btnCategory);
+        btnGroup.add(btnAuthor);
         btnGroup.add(btnRefresh);
         toolbar.add(btnGroup, BorderLayout.WEST);
 
@@ -115,6 +122,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnEdit.addActionListener(e -> openEditDialog());
         btnDelete.addActionListener(e -> deleteSelected());
         btnCategory.addActionListener(e -> openCategoryManageDialog());
+        btnAuthor.addActionListener(e -> openAuthorManageDialog());
         btnRefresh.addActionListener(e -> { searchField.setText(""); loadData(null); });
         btnSearch.addActionListener(e -> loadData(searchField.getText()));
         searchField.addActionListener(e -> loadData(searchField.getText())); // Enter
@@ -220,11 +228,11 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         worker.execute();
     }
 
-    private void loadAdvancedData(String keyword, String category, Integer publishYear, Boolean isAvailable) {
+    private void loadAdvancedData(String keyword, String category, String author, Integer publishYear, Boolean isAvailable) {
         statusLabel.setText("Đang tải (Lọc nâng cao)...");
         SwingWorker<List<Book>, Void> worker = new SwingWorker<>() {
             @Override protected List<Book> doInBackground() throws Exception {
-                return bookService.advancedSearchBooks(keyword, category, publishYear, isAvailable);
+                return bookService.advancedSearchBooks(keyword, category, author, publishYear, isAvailable);
             }
             @Override protected void done() {
                 updateTableData(this, "Lọc nâng cao");
@@ -317,10 +325,18 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         }
     }
 
+    private void openAuthorManageDialog() {
+        AuthorManageDialog dialog = new AuthorManageDialog((Frame) SwingUtilities.getWindowAncestor(this));
+        dialog.setVisible(true);
+        if (dialog.isDataChanged()) {
+            loadData(searchField.getText());
+        }
+    }
+
     private void openAdvancedFilterDialog() {
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Lọc Nâng Cao", true);
         dialog.setLayout(new BorderLayout());
-        dialog.setSize(400, 300);
+        dialog.setSize(420, 360);
         dialog.setLocationRelativeTo(this);
         dialog.setResizable(false);
 
@@ -351,6 +367,20 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         } catch (Exception ignored) {}
         pnlCategory.add(cbCategory, BorderLayout.CENTER);
 
+        // Author
+        JPanel pnlAuthor = new JPanel(new BorderLayout(5, 5));
+        pnlAuthor.setOpaque(false);
+        pnlAuthor.add(new JLabel("Tác giả:"), BorderLayout.WEST);
+        JComboBox<String> cbAuthor = new JComboBox<>();
+        cbAuthor.addItem("Tất cả");
+        try {
+            List<Author> authors = authorService.getAllAuthors();
+            for (Author a : authors) {
+                cbAuthor.addItem(a.getName());
+            }
+        } catch (Exception ignored) {}
+        pnlAuthor.add(cbAuthor, BorderLayout.CENTER);
+
         // Publish Year
         JPanel pnlYear = new JPanel(new BorderLayout(5, 5));
         pnlYear.setOpaque(false);
@@ -369,6 +399,8 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         content.add(Box.createVerticalStrut(10));
         content.add(pnlCategory);
         content.add(Box.createVerticalStrut(10));
+        content.add(pnlAuthor);
+        content.add(Box.createVerticalStrut(10));
         content.add(pnlYear);
         content.add(Box.createVerticalStrut(10));
         content.add(pnlAvailable);
@@ -382,6 +414,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnFilter.addActionListener(e -> {
             String kw = txtKeyword.getText();
             String cat = (String) cbCategory.getSelectedItem();
+            String author = (String) cbAuthor.getSelectedItem();
             Integer year = null;
             if (!txtYear.getText().isBlank()) {
                 try {
@@ -394,7 +427,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
             Boolean isAvail = chkAvailable.isSelected();
             dialog.dispose();
             searchField.setText(kw); // Đồng bộ keyword
-            loadAdvancedData(kw, cat, year, isAvail);
+            loadAdvancedData(kw, cat, author, year, isAvail);
         });
 
         actionPanel.add(btnCancel);

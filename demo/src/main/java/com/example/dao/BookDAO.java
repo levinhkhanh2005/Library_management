@@ -163,7 +163,7 @@ public class BookDAO {
     /**
      * Tìm kiếm nâng cao kết hợp nhiều tiêu chí.
      */
-    public List<Book> advancedSearch(String keyword, String category, Integer publishYear, Boolean isAvailable) throws SQLException {
+    public List<Book> advancedSearch(String keyword, String category, String author, Integer publishYear, Boolean isAvailable) throws SQLException {
         StringBuilder sql = new StringBuilder("SELECT * FROM books WHERE 1=1 ");
         List<Object> params = new ArrayList<>();
 
@@ -178,6 +178,11 @@ public class BookDAO {
         if (category != null && !category.isBlank() && !category.equals("Tất cả")) {
             sql.append(" AND category = ? ");
             params.add(category);
+        }
+
+        if (author != null && !author.isBlank() && !author.equals("Tất cả")) {
+            sql.append(" AND LOWER(TRIM(author)) = LOWER(TRIM(?)) ");
+            params.add(author.trim());
         }
 
         if (publishYear != null) {
@@ -197,6 +202,10 @@ public class BookDAO {
             }
             return mapList(ps.executeQuery());
         }
+    }
+
+    public List<Book> advancedSearch(String keyword, String category, Integer publishYear, Boolean isAvailable) throws SQLException {
+        return advancedSearch(keyword, category, null, publishYear, isAvailable);
     }
 
     /**

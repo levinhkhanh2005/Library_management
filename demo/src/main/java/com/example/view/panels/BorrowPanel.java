@@ -1,11 +1,13 @@
 package com.example.view.panels;
 
 import com.example.model.Borrow;
+import com.example.model.BorrowStats;
 import com.example.service.BorrowService;
 import com.example.service.EmailService;
 import com.example.view.MainFrame;
 import com.example.view.UITheme;
 import com.example.view.dialogs.BorrowDialog;
+import com.example.view.dialogs.BorrowStatsDialog;
 import com.example.view.dialogs.OverdueReminderDialog;
 import com.example.view.dialogs.ReceiptPreviewDialog;
 
@@ -18,7 +20,7 @@ import java.awt.event.*;
 import java.util.List;
 
 /**
- * Panel Quản Lý Mượn/Trả Sách — bảng phiếu mượn, lọc trạng thái, trả sách.
+ * Panel Quản Lý Mượn/Trả Sách — bảng phiếu mượn, lọc trạng thái, trả sách, thống kê.
  */
 public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
 
@@ -29,6 +31,12 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
     private JTextField        searchField;
     private JLabel            statusLabel;
     private JButton           btnReturn, btnRenew, btnLost, btnExportPdf, btnDelete, btnEmailRemind;
+
+    // Stat card labels
+    private JLabel lblCardTotalVal, lblCardTotalSub;
+    private JLabel lblCardBorrowingVal, lblCardBorrowingSub;
+    private JLabel lblCardReturnedVal, lblCardReturnedSub;
+    private JLabel lblCardOverdueVal, lblCardOverdueSub;
 
     private static final String[] COLUMNS = {
         "#", "Mã Phiếu", "Tên Sách", "Độc Giả", "Mã Thẻ",
@@ -47,11 +55,12 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         add(buildTable(),   BorderLayout.CENTER);
         add(buildFooter(),  BorderLayout.SOUTH);
 
+        loadStatsSync();
         loadData("Tất cả", null);
     }
 
     // ================================================================
-    //  Header
+    //  Header & Stat Cards
     // ================================================================
 
     private JPanel buildHeader() {
@@ -59,11 +68,111 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         header.setBackground(UITheme.BG_PRIMARY);
         header.add(
             UITheme.createPageHeader("📋  Mượn / Trả Sách",
-                "Quản lý phiếu mượn, gia hạn, ghi nhận trả sách và tính tiền phạt"),
+                "Quản lý phiếu mượn, gia hạn, ghi nhận trả sách và thống kê mượn trả"),
             BorderLayout.NORTH
         );
-        header.add(buildToolbar(), BorderLayout.CENTER);
+
+        JPanel controlsWrapper = new JPanel(new BorderLayout(0, UITheme.PAD_SM));
+        controlsWrapper.setOpaque(false);
+        controlsWrapper.add(buildStatCardsBar(), BorderLayout.NORTH);
+        controlsWrapper.add(buildToolbar(), BorderLayout.CENTER);
+
+        header.add(controlsWrapper, BorderLayout.CENTER);
         return header;
+    }
+
+    private JPanel buildStatCardsBar() {
+        JPanel bar = new JPanel(new GridLayout(1, 4, UITheme.PAD_SM, 0));
+        bar.setOpaque(false);
+
+        lblCardTotalVal = new JLabel("0 cuốn");
+        lblCardTotalSub = new JLabel("0 sách đã mượn");
+
+        lblCardBorrowingVal = new JLabel("0 cuốn");
+        lblCardBorrowingSub = new JLabel("0 sách đang lưu hành");
+
+        lblCardReturnedVal = new JLabel("0 cuốn");
+        lblCardReturnedSub = new JLabel("0 sách đã hoàn tất");
+
+        lblCardOverdueVal = new JLabel("0 cuốn");
+        lblCardOverdueSub = new JLabel("0 sách cần xử lý");
+
+        bar.add(createClickableStatCard("TỔNG SÁCH ĐÃ MƯỢN", lblCardTotalVal, lblCardTotalSub,
+            UITheme.ACCENT_PRIMARY, "Tất cả", "Nhấp để hiển thị tất cả sách và phiếu mượn"));
+
+        bar.add(createClickableStatCard("SÁCH ĐANG MƯỢN", lblCardBorrowingVal, lblCardBorrowingSub,
+            new Color(0x2563EB), "Đang mượn", "Nhấp để lọc danh sách sách đang mượn"));
+
+        bar.add(createClickableStatCard("SÁCH ĐÃ TRẢ", lblCardReturnedVal, lblCardReturnedSub,
+            UITheme.COLOR_SUCCESS, "Đã trả", "Nhấp để lọc danh sách sách đã trả"));
+
+        bar.add(createClickableStatCard("SÁCH QUÁ HẠN / MẤT", lblCardOverdueVal, lblCardOverdueSub,
+            UITheme.COLOR_DANGER, "Quá hạn", "Nhấp để lọc danh sách sách quá hạn hoặc mất"));
+
+        return bar;
+    }
+
+    private JPanel createClickableStatCard(String title, JLabel valLbl, JLabel subLbl,
+                                          Color color, String filterStatus, String tooltip) {
+        JPanel card = new JPanel(new BorderLayout(0, 2));
+        card.setBackground(UITheme.BG_WHITE);
+        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        card.setToolTipText(tooltip);
+        card.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(UITheme.BORDER_COLOR, 1),
+            new EmptyBorder(8, 14, 8, 14)
+        ));
+
+        JLabel titleLbl = new JLabel(title);
+        titleLbl.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 11));
+        titleLbl.setForeground(UITheme.TEXT_SECONDARY);
+
+        valLbl.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 22));
+        valLbl.setForeground(color);
+
+        subLbl.setFont(UITheme.FONT_SMALL);
+        subLbl.setForeground(UITheme.TEXT_MUTED);
+
+        JPanel center = new JPanel(new GridLayout(2, 1, 0, 2));
+        center.setOpaque(false);
+        center.add(valLbl);
+        center.add(subLbl);
+
+        card.add(titleLbl, BorderLayout.NORTH);
+        card.add(center, BorderLayout.CENTER);
+
+        JPanel colorBar = new JPanel();
+        colorBar.setPreferredSize(new Dimension(0, 3));
+        colorBar.setBackground(color);
+        card.add(colorBar, BorderLayout.SOUTH);
+
+        card.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                card.setBackground(new Color(0xF8FAFC));
+                card.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(color, 1),
+                    new EmptyBorder(8, 14, 8, 14)
+                ));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                card.setBackground(UITheme.BG_WHITE);
+                card.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(UITheme.BORDER_COLOR, 1),
+                    new EmptyBorder(8, 14, 8, 14)
+                ));
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (searchField != null) searchField.setText("");
+                loadData(filterStatus, null);
+            }
+        });
+
+        return card;
     }
 
     private JPanel buildToolbar() {
@@ -78,15 +187,16 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         JPanel leftGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         leftGroup.setOpaque(false);
 
-        JButton btnNew    = UITheme.createPrimaryButton("＋  Tạo Phiếu Mượn");
-        btnReturn         = UITheme.createSuccessButton("✓  Trả Sách");
-        btnRenew          = UITheme.createSecondaryButton("⏳  Gia Hạn");
-        btnLost           = UITheme.createDangerButton("⚠  Báo Mất");
-        btnExportPdf      = UITheme.createSecondaryButton("📄  Xuất PDF");
-        btnEmailRemind    = UITheme.createSecondaryButton("📧  Nhắc Email");
-        btnDelete         = UITheme.createDangerButton("✕  Xóa Phiếu");
+        JButton btnNew        = UITheme.createPrimaryButton("＋  Tạo Phiếu Mượn");
+        btnReturn             = UITheme.createSuccessButton("✓  Trả Sách");
+        btnRenew              = UITheme.createSecondaryButton("⏳  Gia Hạn");
+        btnLost               = UITheme.createDangerButton("⚠  Báo Mất");
+        btnExportPdf          = UITheme.createSecondaryButton("📄  Xuất PDF");
+        btnEmailRemind        = UITheme.createSecondaryButton("📧  Nhắc Email");
+        btnDelete             = UITheme.createDangerButton("✕  Xóa Phiếu");
         JButton btnOverdueList = UITheme.createSecondaryButton("🔔  DS Quá Hạn");
-        JButton btnRefresh= UITheme.createSecondaryButton("↺  Làm Mới");
+        JButton btnStats      = UITheme.createSecondaryButton("📊  Thống Kê");
+        JButton btnRefresh    = UITheme.createSecondaryButton("↺  Làm Mới");
 
         btnReturn.setEnabled(false);
         btnRenew.setEnabled(false);
@@ -103,6 +213,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         leftGroup.add(btnEmailRemind);
         leftGroup.add(btnDelete);
         leftGroup.add(btnOverdueList);
+        leftGroup.add(btnStats);
         leftGroup.add(btnRefresh);
         toolbar.add(leftGroup, BorderLayout.WEST);
 
@@ -146,6 +257,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             dialog.setVisible(true);
             loadData("Tất cả", null);
         });
+        btnStats.addActionListener(e -> openStatsDialog());
 
         return toolbar;
     }
@@ -326,16 +438,74 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             long overdue = list.stream().filter(b -> b.getStatus() == Borrow.Status.OVERDUE).count();
             long lost    = list.stream().filter(Borrow::isLost).count();
             statusLabel.setText(String.format(
-                "Tổng: %d phiếu  |  Đang mượn: %d  |  Quá hạn: %d  |  Mất: %d",
-                list.size(), active, overdue, lost));
+                "Tổng hiển thị: %d phiếu (%d sách)  |  Đang mượn: %d cuốn  |  Quá hạn: %d cuốn  |  Mất: %d cuốn",
+                list.size(), list.size(), active, overdue, lost));
             btnReturn.setEnabled(false);
             btnRenew.setEnabled(false);
             btnLost.setEnabled(false);
             btnExportPdf.setEnabled(false);
             btnDelete.setEnabled(false);
+
+            loadStatsAsync();
         } catch (Exception ex) {
             UITheme.showError(BorrowPanel.this, "Lỗi tải dữ liệu:\n" + ex.getMessage());
         }
+    }
+
+    private void openStatsDialog() {
+        BorrowStatsDialog dlg = new BorrowStatsDialog(
+            SwingUtilities.getWindowAncestor(this));
+        dlg.setVisible(true);
+    }
+
+    /** Nạp thống kê đồng bộ ngay khi khởi tạo giao diện để tránh hiển thị nhấp nháy hoặc trễ. */
+    private void loadStatsSync() {
+        try {
+            BorrowStats stats = borrowService.getBorrowStats();
+            applyStatsToCards(stats);
+        } catch (Exception ignored) {
+            loadStatsAsync();
+        }
+    }
+
+    /** Cập nhật 4 thẻ thống kê ở đầu bảng theo số liệu chuẩn xác. */
+    private void applyStatsToCards(BorrowStats stats) {
+        if (stats == null || lblCardTotalVal == null) return;
+        lblCardTotalVal.setText(stats.getTotalBorrows() + " cuốn");
+        lblCardTotalSub.setText("Tổng: " + stats.getTotalBorrows() + " sách đã mượn"
+            + (stats.getTodayBorrows() > 0 ? " (+" + stats.getTodayBorrows() + " hôm nay)" : ""));
+
+        lblCardBorrowingVal.setText(stats.getBorrowingCount() + " cuốn");
+        lblCardBorrowingSub.setText(stats.getBorrowingCount() + " sách đang mượn lưu hành");
+
+        lblCardReturnedVal.setText(stats.getReturnedCount() + " cuốn");
+        lblCardReturnedSub.setText(stats.getReturnedCount() + " sách đã trả xong (" + stats.getFormattedReturnRate() + ")");
+
+        int overdueTotal = stats.getOverdueCount() + stats.getLostCount();
+        lblCardOverdueVal.setText(overdueTotal + " cuốn");
+        lblCardOverdueSub.setText(stats.getLostCount() > 0
+            ? stats.getOverdueCount() + " sách quá hạn | " + stats.getLostCount() + " mất"
+            : stats.getOverdueCount() + " sách quá hạn cần thu hồi");
+    }
+
+    private void loadStatsAsync() {
+        SwingWorker<BorrowStats, Void> worker = new SwingWorker<>() {
+            @Override
+            protected BorrowStats doInBackground() throws Exception {
+                return borrowService.getBorrowStats();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    BorrowStats stats = get();
+                    applyStatsToCards(stats);
+                } catch (Exception ex) {
+                    System.err.println("[BorrowPanel] Lỗi tải thống kê: " + ex.getMessage());
+                }
+            }
+        };
+        worker.execute();
     }
 
     /** Lấy borrowId từ dòng đang chọn. */

@@ -253,7 +253,8 @@ public class EmailService {
      */
     public String buildOverdueEmailHtml(Borrow borrow, Reader reader,
                                         long overdueDays, double fineAmount) {
-        DecimalFormat df = new DecimalFormat("#,##0");
+        java.text.DecimalFormatSymbols symbols = new java.text.DecimalFormatSymbols(java.util.Locale.US);
+        DecimalFormat df = new DecimalFormat("#,##0", symbols);
 
         return """
             <!DOCTYPE html>

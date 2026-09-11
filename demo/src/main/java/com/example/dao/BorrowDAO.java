@@ -1,9 +1,12 @@
 package com.example.dao;
 
 import com.example.model.Borrow;
+import com.example.model.BorrowStats;
 import com.example.util.DatabaseConnection;
 
 import java.sql.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -312,7 +315,181 @@ public class BorrowDAO {
         }
     }
 
-    // ===================== Thống kê =====================
+    // ===================== Thống kê Mượn / Trả Sách =====================
+
+    /**
+     * Lấy toàn bộ số liệu thống kê mượn và trả sách tổng hợp.
+     */
+    public BorrowStats getBorrowStats() throws SQLException {
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        String thisMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("MM/yyyy"));
+
+        String sql = """
+                SELECT
+                    COUNT(*) AS total_borrows,
+                    SUM(CASE WHEN status = 'BORROWING' THEN 1 ELSE 0 END) AS borrowing_count,
+                    SUM(CASE WHEN status = 'OVERDUE' THEN 1 ELSE 0 END) AS overdue_count,
+                    SUM(CASE WHEN status = 'RETURNED' THEN 1 ELSE 0 END) AS returned_count,
+                    SUM(CASE WHEN status = 'LOST' THEN 1 ELSE 0 END) AS lost_count,
+                    SUM(CASE WHEN borrow_date = ? THEN 1 ELSE 0 END) AS today_borrows,
+                    SUM(CASE WHEN return_date = ? THEN 1 ELSE 0 END) AS today_returns,
+                    SUM(CASE WHEN SUBSTR(borrow_date, 4, 7) = ? THEN 1 ELSE 0 END) AS month_borrows,
+                    SUM(CASE WHEN return_date IS NOT NULL AND SUBSTR(return_date, 4, 7) = ? THEN 1 ELSE 0 END) AS month_returns,
+                    COALESCE(SUM(fine_amount), 0) AS total_fines
+                FROM borrows
+                """;
+
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, today);
+            ps.setString(2, today);
+            ps.setString(3, thisMonth);
+            ps.setString(4, thisMonth);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new BorrowStats(
+                        rs.getInt("total_borrows"),
+                        rs.getInt("borrowing_count"),
+                        rs.getInt("overdue_count"),
+                        rs.getInt("returned_count"),
+                        rs.getInt("lost_count"),
+                        rs.getInt("today_borrows"),
+                        rs.getInt("today_returns"),
+                        rs.getInt("month_borrows"),
+                        rs.getInt("month_returns"),
+                        rs.getDouble("total_fines")
+                    );
+                }
+            }
+        }
+        return new BorrowStats();
+    }
+
+    /**
+     * Lấy số liệu thống kê mượn và trả theo khoảng ngày lọc.
+     */
+    public BorrowStats getBorrowStatsByPeriod(String fromDate, String toDate) throws SQLException {
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    COUNT(*) AS total_borrows,
+                    SUM(CASE WHEN status = 'BORROWING' THEN 1 ELSE 0 END) AS borrowing_count,
+                    SUM(CASE WHEN status = 'OVERDUE' THEN 1 ELSE 0 END) AS overdue_count,
+                    SUM(CASE WHEN status = 'RETURNED' THEN 1 ELSE 0 END) AS returned_count,
+                    SUM(CASE WHEN status = 'LOST' THEN 1 ELSE 0 END) AS lost_count,
+                    COALESCE(SUM(fine_amount), 0) AS total_fines
+                FROM borrows b
+                WHERE 1=1
+                """);
+        List<String> params = new ArrayList<>();
+        if (fromDate != null && !fromDate.isBlank()) {
+            String fromYmd = toYmdString(fromDate);
+            if (!fromYmd.isEmpty()) {
+                sql.append(" AND SUBSTR(b.borrow_date,7,4)||SUBSTR(b.borrow_date,4,2)||SUBSTR(b.borrow_date,1,2) >= ? ");
+                params.add(fromYmd);
+            }
+        }
+        if (toDate != null && !toDate.isBlank()) {
+            String toYmd = toYmdString(toDate);
+            if (!toYmd.isEmpty()) {
+                sql.append(" AND SUBSTR(b.borrow_date,7,4)||SUBSTR(b.borrow_date,4,2)||SUBSTR(b.borrow_date,1,2) <= ? ");
+                params.add(toYmd);
+            }
+        }
+
+        try (PreparedStatement ps = getConn().prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setString(i + 1, params.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    BorrowStats stats = new BorrowStats();
+                    stats.setTotalBorrows(rs.getInt("total_borrows"));
+                    stats.setBorrowingCount(rs.getInt("borrowing_count"));
+                    stats.setOverdueCount(rs.getInt("overdue_count"));
+                    stats.setReturnedCount(rs.getInt("returned_count"));
+                    stats.setLostCount(rs.getInt("lost_count"));
+                    stats.setTotalFines(rs.getDouble("total_fines"));
+                    return stats;
+                }
+            }
+        }
+        return new BorrowStats();
+    }
+
+    private String toYmdString(String dateStr) {
+        if (dateStr == null || dateStr.isBlank()) return "";
+        dateStr = dateStr.trim();
+        if (dateStr.length() == 10 && dateStr.charAt(2) == '/' && dateStr.charAt(5) == '/') {
+            return dateStr.substring(6, 10) + dateStr.substring(3, 5) + dateStr.substring(0, 2);
+        }
+        if (dateStr.length() == 10 && dateStr.charAt(4) == '-' && dateStr.charAt(7) == '-') {
+            return dateStr.replace("-", "");
+        }
+        return dateStr;
+    }
+
+    /**
+     * Thống kê số lượng mượn và trả theo từng Thể loại sách.
+     * @return danh sách Object[]: [Tên thể loại, Tổng mượn, Đã trả, Đang mượn]
+     */
+    public List<Object[]> getBorrowStatsByCategory() throws SQLException {
+        String sql = """
+                SELECT COALESCE(bk.category, 'Chưa phân loại') AS category_name,
+                       COUNT(*) AS total_borrows,
+                       SUM(CASE WHEN b.status = 'RETURNED' THEN 1 ELSE 0 END) AS returned_count,
+                       SUM(CASE WHEN b.status IN ('BORROWING', 'OVERDUE') THEN 1 ELSE 0 END) AS active_count
+                FROM borrows b
+                JOIN books bk ON b.book_id = bk.id
+                GROUP BY category_name
+                ORDER BY total_borrows DESC
+                """;
+        List<Object[]> list = new ArrayList<>();
+        try (Statement stmt = getConn().createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(new Object[]{
+                    rs.getString("category_name"),
+                    rs.getInt("total_borrows"),
+                    rs.getInt("returned_count"),
+                    rs.getInt("active_count")
+                });
+            }
+        }
+        return list;
+    }
+
+    /**
+     * Top độc giả mượn trả nhiều nhất.
+     * @return danh sách Object[]: [Mã thẻ, Tên độc giả, Tổng mượn, Đã trả, Đang giữ]
+     */
+    public List<Object[]> getTopReadersByBorrows(int limit) throws SQLException {
+        String sql = """
+                SELECT r.reader_code, r.full_name,
+                       COUNT(*) AS total_borrows,
+                       SUM(CASE WHEN b.status = 'RETURNED' THEN 1 ELSE 0 END) AS returned_count,
+                       SUM(CASE WHEN b.status IN ('BORROWING', 'OVERDUE') THEN 1 ELSE 0 END) AS active_count
+                FROM borrows b
+                JOIN readers r ON b.reader_id = r.id
+                GROUP BY b.reader_id
+                ORDER BY total_borrows DESC
+                LIMIT ?
+                """;
+        List<Object[]> list = new ArrayList<>();
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Object[]{
+                        rs.getString("reader_code"),
+                        rs.getString("full_name"),
+                        rs.getInt("total_borrows"),
+                        rs.getInt("returned_count"),
+                        rs.getInt("active_count")
+                    });
+                }
+            }
+        }
+        return list;
+    }
 
     /** Tổng số phiếu mượn đang hoạt động. */
     public int countActive() throws SQLException {
