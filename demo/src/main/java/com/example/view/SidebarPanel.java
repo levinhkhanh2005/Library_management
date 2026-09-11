@@ -25,6 +25,7 @@ public class SidebarPanel extends JPanel {
         READERS   ("👤", "Độc Giả"),
         BORROWS   ("📋", "Mượn / Trả"),
         REPORT    ("📊", "Báo Cáo"),
+        ACTIVITY  ("🕒", "Hoạt Động"),
         SETTINGS  ("⚙", "Cài Đặt");
 
         public final String icon;

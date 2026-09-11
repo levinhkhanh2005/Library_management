@@ -108,6 +108,39 @@ public class ReaderService {
         return readerDAO.countActive();
     }
 
+    /**
+     * Gia hạn thẻ độc giả thêm {@code months} tháng.
+     * Nếu thẻ còn hạn: tính từ ngày hết hạn hiện tại.
+     * Nếu thẻ đã hết hạn hoặc chưa có ngày hết hạn: tính từ hôm nay.
+     * Tự động đặt lại trạng thái ACTIVE nếu thẻ đang EXPIRED.
+     *
+     * @return Chuỗi ngày hết hạn mới dạng dd/MM/yyyy
+     */
+    public String renewCard(Reader reader, int months) throws SQLException {
+        if (months <= 0) throw new IllegalArgumentException("Số tháng gia hạn phải lớn hơn 0.");
+
+        LocalDate base = LocalDate.now();
+        String oldExpiry = reader.getExpiryDate();
+        if (oldExpiry != null && !oldExpiry.isBlank()) {
+            try {
+                LocalDate oldDate = LocalDate.parse(oldExpiry.trim(), DATE_FMT);
+                if (oldDate.isAfter(base)) base = oldDate;
+            } catch (Exception ignored) {}
+        }
+
+        LocalDate newExpiry = base.plusMonths(months);
+        String newExpiryStr = newExpiry.format(DATE_FMT);
+
+        // Cập nhật expiryDate và đặt lại ACTIVE nếu đang EXPIRED
+        reader.setExpiryDate(newExpiryStr);
+        if (reader.getStatus() == Reader.Status.EXPIRED) {
+            reader.setStatus(Reader.Status.ACTIVE);
+        }
+
+        readerDAO.update(reader);
+        return newExpiryStr;
+    }
+
     // ===================== Validation =====================
 
     private void validateRequired(String value, String fieldName) {

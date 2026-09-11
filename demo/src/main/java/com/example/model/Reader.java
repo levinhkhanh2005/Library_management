@@ -38,6 +38,7 @@ public class Reader {
     private String email;
     private String address;
     private String joinDate;     // Ngày đăng ký thẻ: dd/MM/yyyy
+    private String expiryDate;   // Ngày hết hạn thẻ: dd/MM/yyyy (null = không giới hạn)
     private Status status;
 
     // ===================== Constructors =====================
@@ -58,6 +59,23 @@ public class Reader {
         this.email = email;
         this.address = address;
         this.joinDate = joinDate;
+        this.expiryDate = null;
+        this.status = status;
+    }
+
+    /** Constructor đầy đủ có expiryDate (dùng khi đọc từ DB với cột expiry_date). */
+    public Reader(int id, String readerCode, String fullName, String birthDate,
+                  String phone, String email, String address,
+                  String joinDate, String expiryDate, Status status) {
+        this.id = id;
+        this.readerCode = readerCode;
+        this.fullName = fullName;
+        this.birthDate = birthDate;
+        this.phone = phone;
+        this.email = email;
+        this.address = address;
+        this.joinDate = joinDate;
+        this.expiryDate = expiryDate;
         this.status = status;
     }
 
@@ -100,6 +118,9 @@ public class Reader {
     public String getJoinDate() { return joinDate; }
     public void setJoinDate(String joinDate) { this.joinDate = joinDate; }
 
+    public String getExpiryDate() { return expiryDate; }
+    public void setExpiryDate(String expiryDate) { this.expiryDate = expiryDate; }
+
     public Status getStatus() { return status; }
     public void setStatus(Status status) { this.status = status; }
 
@@ -108,6 +129,23 @@ public class Reader {
     /** Kiểm tra độc giả có thể mượn sách không. */
     public boolean canBorrow() {
         return status == Status.ACTIVE;
+    }
+
+    /**
+     * Kiểm tra thẻ đã hết hạn theo ngày (so sánh với hôm nay).
+     * Nếu không có expiryDate thì coi là chưa hết hạn.
+     */
+    public boolean isExpiredByDate() {
+        if (expiryDate == null || expiryDate.isBlank()) return false;
+        try {
+            java.time.LocalDate exp = java.time.LocalDate.parse(
+                expiryDate.trim(),
+                java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")
+            );
+            return exp.isBefore(java.time.LocalDate.now());
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override
