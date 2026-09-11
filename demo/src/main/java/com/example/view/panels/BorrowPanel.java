@@ -227,8 +227,6 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             String statusText = (String) tableModel.getValueAt(modelRow, 9);
             boolean isBorrowing = statusText.equals(Borrow.Status.BORROWING.getLabel());
             boolean isOverdue   = statusText.equals(Borrow.Status.OVERDUE.getLabel());
-            boolean isReturned  = statusText.equals(Borrow.Status.RETURNED.getLabel());
-            boolean isLost      = statusText.equals(Borrow.Status.LOST.getLabel());
 
             btnReturn.setEnabled(isBorrowing || isOverdue);
             btnRenew.setEnabled(isBorrowing || isOverdue);
@@ -352,7 +350,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         return -1;
     }
 
-    private void openBorrowDialog() {
+    public void openBorrowDialog() {
         BorrowDialog dlg = new BorrowDialog(
             (Frame) SwingUtilities.getWindowAncestor(this));
         dlg.setVisible(true);

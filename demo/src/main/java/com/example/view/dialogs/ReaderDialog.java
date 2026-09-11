@@ -8,8 +8,6 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 
 /**
  * Dialog thêm mới hoặc chỉnh sửa thông tin độc giả.
@@ -19,8 +17,6 @@ public class ReaderDialog extends JDialog {
     private final ReaderService readerService = new ReaderService();
     private final Reader        editReader;   // null = thêm mới
     private boolean             saved = false;
-
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     // ---- Form fields ----
     private JTextField fFullName, fBirthDate, fPhone, fEmail, fAddress;
