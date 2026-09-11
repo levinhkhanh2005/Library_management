@@ -806,22 +806,17 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
     }
 
     private void sendEmailReminder() {
-        int row = table.getSelectedRow();
-        if (row < 0) return;
+        int borrowId = getSelectedBorrowId();
+        if (borrowId < 0) {
+            UITheme.showWarning(this, "Vui lòng chọn một phiếu mượn.");
+            return;
+        }
 
+        int row = table.getSelectedRow();
         int modelRow = table.convertRowIndexToModel(row);
         String statusText = (String) tableModel.getValueAt(modelRow, 9);
         if (!statusText.equals(Borrow.Status.OVERDUE.getLabel())) {
             UITheme.showWarning(this, "Chỉ có thể gửi nhắc nhở cho phiếu Quá hạn.");
-            return;
-        }
-
-        String borrowIdStr = (String) tableModel.getValueAt(modelRow, 1);
-        int borrowId;
-        try {
-            borrowId = Integer.parseInt(borrowIdStr.replace("PM-", ""));
-        } catch (NumberFormatException e) {
-            UITheme.showError(this, "Mã phiếu không hợp lệ.");
             return;
         }
 
