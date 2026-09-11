@@ -34,10 +34,20 @@ public class BookDialog extends JDialog {
     private JTextArea           fDescription;
 
     public BookDialog(Frame parent, Book book) {
-        super(parent, book == null ? "Thêm Sách Mới" : "Chỉnh Sửa Sách", true);
-        this.editBook = book;
+        this(parent, book, false);
+    }
+
+    public BookDialog(Frame parent, Book book, boolean isClone) {
+        super(parent, book == null ? "Thêm Sách Mới" : (isClone ? "Nhân Bản Sách Mới" : "Chỉnh Sửa Sách"), true);
+        this.editBook = isClone ? null : book;
         initUI();
-        if (book != null) populateFields(book);
+        if (book != null) {
+            populateFields(book);
+            if (isClone) {
+                fIsbn.setText(""); // Reset ISBN để thủ thư nhập mã ISBN mới
+                fTitle.setText(book.getTitle() + " (Tập mới)");
+            }
+        }
         pack();
         setResizable(false);
         setLocationRelativeTo(parent);

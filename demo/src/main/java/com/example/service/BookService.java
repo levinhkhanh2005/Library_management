@@ -4,6 +4,7 @@ import com.example.dao.BookDAO;
 import com.example.dao.CategoryDAO;
 import com.example.model.Book;
 import com.example.model.Category;
+import com.example.model.CategoryBookStat;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -78,6 +79,18 @@ public class BookService {
             throw new IllegalArgumentException("Số bản còn lại không được vượt tổng số bản.");
         }
 
+        // Kiểm tra số sách đang được mượn: không được giảm totalCopies xuống dưới số đang mượn
+        Book current = bookDAO.findById(book.getId());
+        if (current != null) {
+            int currentlyBorrowed = current.getBorrowedCopies();
+            if (book.getTotalCopies() < currentlyBorrowed) {
+                throw new IllegalArgumentException(
+                    "Không thể giảm tổng số bản xuống " + book.getTotalCopies() + ".\n" +
+                    "Hiện tại đang có " + currentlyBorrowed + " bản đang được bạn đọc mượn!"
+                );
+            }
+        }
+
         // Kiểm tra ISBN trùng (nếu đã thay đổi)
         if (book.getIsbn() != null && !book.getIsbn().isBlank()) {
             Book existing = bookDAO.findByIsbn(book.getIsbn());
@@ -88,6 +101,54 @@ public class BookService {
 
         if (!bookDAO.update(book)) {
             throw new SQLException("Cập nhật sách thất bại. Sách có thể không tồn tại.");
+        }
+    }
+
+    // ===================== Nghiệp vụ kho sách (Nhập thêm / Thanh lý) =====================
+
+    /**
+     * Nghiệp vụ nhập thêm số lượng bản sao sách vào kho thư viện.
+     * @param bookId ID sách
+     * @param additionalCopies số bản nhập thêm (phải > 0)
+     * @param notes ghi chú / nguồn nhập (tùy chọn)
+     */
+    public void importCopies(int bookId, int additionalCopies, String notes) throws SQLException {
+        if (additionalCopies <= 0) {
+            throw new IllegalArgumentException("Số lượng bản sao nhập thêm phải lớn hơn 0.");
+        }
+        Book book = bookDAO.findById(bookId);
+        if (book == null) {
+            throw new IllegalArgumentException("Sách không tồn tại.");
+        }
+        if (!bookDAO.addCopies(bookId, additionalCopies)) {
+            throw new SQLException("Nhập thêm bản sao thất bại.");
+        }
+    }
+
+    /**
+     * Nghiệp vụ thanh lý / xuất hủy bản sao sách hư hỏng, rách nát, mất mát trong kho.
+     * @param bookId ID sách
+     * @param discardCopies số lượng bản thanh lý
+     * @param reason lý do thanh lý (bắt buộc)
+     */
+    public void discardCopies(int bookId, int discardCopies, String reason) throws SQLException {
+        if (discardCopies <= 0) {
+            throw new IllegalArgumentException("Số lượng bản sao thanh lý phải lớn hơn 0.");
+        }
+        validateRequired(reason, "Lý do thanh lý");
+        Book book = bookDAO.findById(bookId);
+        if (book == null) {
+            throw new IllegalArgumentException("Sách không tồn tại.");
+        }
+        if (discardCopies > book.getAvailableCopies()) {
+            throw new IllegalStateException(
+                "Không thể thanh lý " + discardCopies + " bản sao.\n" +
+                "Hiện kho chỉ còn " + book.getAvailableCopies() + " bản có sẵn.\n" +
+                "(Vẫn còn " + book.getBorrowedCopies() + " bản đang được bạn đọc mượn ngoài thư viện)."
+            );
+        }
+        if (!bookDAO.discardCopies(bookId, discardCopies)) {
+            throw new SQLException("Thanh lý bản sao thất bại.");
         }
     }
 
@@ -145,6 +206,38 @@ public class BookService {
 
     public int getTotalBorrowed() throws SQLException {
         return bookDAO.countBorrowed();
+    }
+
+    /**
+     * Lấy thống kê phân bố thể loại sách kèm tỷ lệ % chính xác trong tổng số sách.
+     * @param byTitleCount true nếu tính % theo số đầu sách (titles), false nếu tính theo tổng số bản sao (copies)
+     * @return danh sách CategoryBookStat đã được tính percentage
+     */
+    public List<CategoryBookStat> getCategoryDistribution(boolean byTitleCount) throws SQLException {
+        List<CategoryBookStat> stats = bookDAO.getCategoryStats();
+        if (stats.isEmpty()) return stats;
+
+        double total = 0.0;
+        for (CategoryBookStat stat : stats) {
+            total += byTitleCount ? stat.getTitleCount() : stat.getTotalCopies();
+        }
+
+        if (total > 0) {
+            for (CategoryBookStat stat : stats) {
+                double val = byTitleCount ? stat.getTitleCount() : stat.getTotalCopies();
+                double pct = (val * 100.0) / total;
+                // Làm tròn 1 chữ số thập phân
+                stat.setPercentage(Math.round(pct * 10.0) / 10.0);
+            }
+        }
+        return stats;
+    }
+
+    /**
+     * Lấy danh sách bạn đọc đang mượn các bản sao của cuốn sách này.
+     */
+    public List<Object[]> getActiveBorrowers(int bookId) throws SQLException {
+        return bookDAO.getActiveBorrowersForBook(bookId);
     }
 
     // ===================== Helper =====================

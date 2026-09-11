@@ -1,6 +1,7 @@
 package com.example.dao;
 
 import com.example.model.Book;
+import com.example.model.CategoryBookStat;
 import com.example.util.DatabaseConnection;
 
 import java.sql.*;
@@ -90,6 +91,39 @@ public class BookDAO {
         String sql = "UPDATE books SET total_copies = total_copies - 1 WHERE id = ? AND total_copies > 0";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, bookId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Tăng số bản sách (cả tổng số và số có sẵn) khi nhập thêm sách mới vào kho.
+     */
+    public boolean addCopies(int bookId, int count) throws SQLException {
+        String sql = "UPDATE books SET total_copies = total_copies + ?, available_copies = available_copies + ? WHERE id = ?";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, count);
+            ps.setInt(2, count);
+            ps.setInt(3, bookId);
+            return ps.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * Thanh lý / giảm số bản sao khi sách bị hư hỏng, rách nát, mất trong kho.
+     * Chỉ giảm khi số bản có sẵn >= count.
+     */
+    public boolean discardCopies(int bookId, int count) throws SQLException {
+        String sql = """
+                UPDATE books 
+                SET total_copies = total_copies - ?, available_copies = available_copies - ? 
+                WHERE id = ? AND available_copies >= ? AND total_copies >= ?
+                """;
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, count);
+            ps.setInt(2, count);
+            ps.setInt(3, bookId);
+            ps.setInt(4, count);
+            ps.setInt(5, count);
             return ps.executeUpdate() > 0;
         }
     }
@@ -246,6 +280,68 @@ public class BookDAO {
              ResultSet rs   = stmt.executeQuery(sql)) {
             return rs.next() ? rs.getInt(1) : 0;
         }
+    }
+
+    /**
+     * Thống kê số lượng sách theo thể loại.
+     * Trả về danh sách CategoryBookStat gồm tên thể loại, số đầu sách, tổng số bản sao, số bản có sẵn.
+     */
+    public List<CategoryBookStat> getCategoryStats() throws SQLException {
+        String sql = """
+                SELECT 
+                    COALESCE(NULLIF(TRIM(category), ''), 'Chưa phân loại') AS cat_name,
+                    COUNT(*) AS title_count,
+                    SUM(total_copies) AS sum_total_copies,
+                    SUM(available_copies) AS sum_available_copies
+                FROM books
+                GROUP BY cat_name
+                ORDER BY title_count DESC, sum_total_copies DESC
+                """;
+        List<CategoryBookStat> list = new ArrayList<>();
+        try (Statement stmt = getConn().createStatement();
+             ResultSet rs   = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(new CategoryBookStat(
+                    rs.getString("cat_name"),
+                    rs.getInt("title_count"),
+                    rs.getInt("sum_total_copies"),
+                    rs.getInt("sum_available_copies")
+                ));
+            }
+        }
+        return list;
+    }
+
+    /**
+     * Lấy danh sách các phiếu mượn đang hoạt động của cuốn sách này kèm thông tin bạn đọc.
+     * Mỗi phần tử Object[] gồm: [borrowId, readerCode, readerName, readerPhone, borrowDate, dueDate, status]
+     */
+    public List<Object[]> getActiveBorrowersForBook(int bookId) throws SQLException {
+        String sql = """
+                SELECT b.id, r.reader_code, r.full_name, r.phone, b.borrow_date, b.due_date, b.status
+                FROM borrows b
+                JOIN readers r ON b.reader_id = r.id
+                WHERE b.book_id = ? AND b.status IN ('BORROWING', 'OVERDUE')
+                ORDER BY b.due_date ASC
+                """;
+        List<Object[]> list = new ArrayList<>();
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Object[]{
+                        rs.getInt("id"),
+                        rs.getString("reader_code"),
+                        rs.getString("full_name"),
+                        rs.getString("phone"),
+                        rs.getString("borrow_date"),
+                        rs.getString("due_date"),
+                        rs.getString("status")
+                    });
+                }
+            }
+        }
+        return list;
     }
 
     // ===================== Mapping =====================

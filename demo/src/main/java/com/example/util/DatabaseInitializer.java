@@ -119,19 +119,33 @@ public class DatabaseInitializer {
             )
             """;
 
+    private static final String CREATE_TABLE_LOGIN_LOGS = """
+            CREATE TABLE IF NOT EXISTS login_logs (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER,
+                username   TEXT    NOT NULL,
+                full_name  TEXT,
+                role       TEXT,
+                action     TEXT    NOT NULL,
+                logged_at  TEXT    DEFAULT (datetime('now','localtime'))
+            )
+            """;
+
     // ============================================================
     //  Index để tăng tốc truy vấn
     // ============================================================
 
     private static final String[] CREATE_INDEXES = {
-        "CREATE INDEX IF NOT EXISTS idx_books_title      ON books(title)",
-        "CREATE INDEX IF NOT EXISTS idx_books_author     ON books(author)",
-        "CREATE INDEX IF NOT EXISTS idx_books_category   ON books(category)",
-        "CREATE INDEX IF NOT EXISTS idx_categories_name  ON categories(name)",
-        "CREATE INDEX IF NOT EXISTS idx_authors_name     ON authors(name)",
-        "CREATE INDEX IF NOT EXISTS idx_borrows_book     ON borrows(book_id)",
-        "CREATE INDEX IF NOT EXISTS idx_borrows_reader   ON borrows(reader_id)",
-        "CREATE INDEX IF NOT EXISTS idx_borrows_status   ON borrows(status)",
+        "CREATE INDEX IF NOT EXISTS idx_books_title          ON books(title)",
+        "CREATE INDEX IF NOT EXISTS idx_books_author         ON books(author)",
+        "CREATE INDEX IF NOT EXISTS idx_books_category       ON books(category)",
+        "CREATE INDEX IF NOT EXISTS idx_categories_name      ON categories(name)",
+        "CREATE INDEX IF NOT EXISTS idx_authors_name         ON authors(name)",
+        "CREATE INDEX IF NOT EXISTS idx_borrows_book         ON borrows(book_id)",
+        "CREATE INDEX IF NOT EXISTS idx_borrows_reader       ON borrows(reader_id)",
+        "CREATE INDEX IF NOT EXISTS idx_borrows_status       ON borrows(status)",
+        "CREATE INDEX IF NOT EXISTS idx_login_logs_logged_at ON login_logs(logged_at)",
+        "CREATE INDEX IF NOT EXISTS idx_login_logs_action    ON login_logs(action)"
     };
 
     // ============================================================
@@ -269,6 +283,7 @@ public class DatabaseInitializer {
             stmt.execute(CREATE_TABLE_SYSTEM_SETTINGS);
             stmt.execute(CREATE_TABLE_EMAIL_LOGS);
             stmt.execute(CREATE_TABLE_AUTHORS);
+            stmt.execute(CREATE_TABLE_LOGIN_LOGS);
 
             // Migration: thêm cột renew_count nếu DB đã tồn tại từ phiên bản trước
             try {
@@ -326,6 +341,34 @@ public class DatabaseInitializer {
             for (String sql : INSERT_DEFAULT_SMTP) {
                 stmt.execute(sql);
             }
+
+            // Chèn dữ liệu mẫu lịch sử đăng nhập nếu bảng còn trống
+            try (var rs = stmt.executeQuery("SELECT COUNT(*) FROM login_logs")) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    String[] sampleLogs = {
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (1, 'admin', 'Quản trị viên', 'ADMIN', 'LOGIN', datetime('now','localtime','-6 days','+08:30:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (1, 'admin', 'Quản trị viên', 'ADMIN', 'LOGOUT', datetime('now','localtime','-6 days','+17:15:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (2, 'thuthu', 'Nguyễn Thị Thu', 'LIBRARIAN', 'LOGIN', datetime('now','localtime','-5 days','+08:00:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (2, 'thuthu', 'Nguyễn Thị Thu', 'LIBRARIAN', 'LOGOUT', datetime('now','localtime','-5 days','+17:00:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (1, 'admin', 'Quản trị viên', 'ADMIN', 'LOGIN', datetime('now','localtime','-4 days','+09:10:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (2, 'thuthu', 'Nguyễn Thị Thu', 'LIBRARIAN', 'LOGIN', datetime('now','localtime','-4 days','+08:05:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (2, 'thuthu', 'Nguyễn Thị Thu', 'LIBRARIAN', 'LOGOUT', datetime('now','localtime','-4 days','+16:45:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (1, 'admin', 'Quản trị viên', 'ADMIN', 'LOGIN', datetime('now','localtime','-3 days','+08:15:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (2, 'thuthu', 'Nguyễn Thị Thu', 'LIBRARIAN', 'LOGIN', datetime('now','localtime','-3 days','+08:30:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (1, 'admin', 'Quản trị viên', 'ADMIN', 'LOGOUT', datetime('now','localtime','-3 days','+17:30:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (2, 'thuthu', 'Nguyễn Thị Thu', 'LIBRARIAN', 'LOGIN', datetime('now','localtime','-2 days','+08:00:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (1, 'admin', 'Quản trị viên', 'ADMIN', 'LOGIN', datetime('now','localtime','-2 days','+10:00:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (2, 'thuthu', 'Nguyễn Thị Thu', 'LIBRARIAN', 'LOGOUT', datetime('now','localtime','-2 days','+17:00:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (2, 'thuthu', 'Nguyễn Thị Thu', 'LIBRARIAN', 'LOGIN', datetime('now','localtime','-1 days','+08:10:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (1, 'admin', 'Quản trị viên', 'ADMIN', 'LOGIN', datetime('now','localtime','-1 days','+13:30:00'))",
+                        "INSERT INTO login_logs (user_id, username, full_name, role, action, logged_at) VALUES (1, 'admin', 'Quản trị viên', 'ADMIN', 'LOGIN', datetime('now','localtime','-2 hours'))"
+                    };
+                    for (String sql : sampleLogs) {
+                        stmt.execute(sql);
+                    }
+                }
+            } catch (SQLException ignored) {}
+
             System.out.println("[DB] Dữ liệu mặc định đã được tạo.");
         }
     }
