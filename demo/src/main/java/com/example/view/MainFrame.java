@@ -2,6 +2,7 @@ package com.example.view;
 
 import com.example.service.AuthService;
 import com.example.util.DatabaseConnection;
+import com.example.view.panels.ActivityPanel;
 import com.example.view.panels.BookPanel;
 import com.example.view.panels.BorrowPanel;
 import com.example.view.panels.DashboardPanel;
@@ -31,6 +32,7 @@ public class MainFrame extends JFrame {
     private ReaderPanel    readerPanel;
     private BorrowPanel    borrowPanel;
     private ReportPanel    reportPanel;
+    private ActivityPanel  activityPanel;
     private SettingsPanel  settingsPanel;
 
     // ================================================================
@@ -204,6 +206,10 @@ public class MainFrame extends JFrame {
             case REPORT -> {
                 reportPanel = new ReportPanel();
                 yield reportPanel;
+            }
+            case ACTIVITY -> {
+                activityPanel = new ActivityPanel();
+                yield activityPanel;
             }
             case SETTINGS -> {
                 settingsPanel = new SettingsPanel();

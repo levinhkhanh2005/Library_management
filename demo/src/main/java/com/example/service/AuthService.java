@@ -1,5 +1,6 @@
 package com.example.service;
 
+import com.example.dao.LoginLogDAO;
 import com.example.dao.UserDAO;
 import com.example.model.User;
 
@@ -12,7 +13,8 @@ import java.util.List;
  */
 public class AuthService {
 
-    private final UserDAO userDAO = new UserDAO();
+    private final UserDAO     userDAO     = new UserDAO();
+    private final LoginLogDAO loginLogDAO = new LoginLogDAO();
 
     /** Người dùng đang đăng nhập (null nếu chưa đăng nhập). */
     private static User currentUser = null;
@@ -42,6 +44,20 @@ public class AuthService {
 
         currentUser = user;
         System.out.println("[AUTH] Đăng nhập: " + user.getFullName() + " (" + user.getRole().getLabel() + ")");
+
+        // Ghi log hoạt động đăng nhập
+        try {
+            loginLogDAO.insert(
+                user.getId(),
+                user.getUsername(),
+                user.getFullName(),
+                user.getRole().name(),
+                "LOGIN"
+            );
+        } catch (Exception e) {
+            System.err.println("[AuthService] Lỗi ghi login log: " + e.getMessage());
+        }
+
         return user;
     }
 
@@ -49,7 +65,21 @@ public class AuthService {
      * Đăng xuất — xóa session hiện tại.
      */
     public void logout() {
-        System.out.println("[AUTH] Đăng xuất: " + (currentUser != null ? currentUser.getUsername() : "?"));
+        if (currentUser != null) {
+            System.out.println("[AUTH] Đăng xuất: " + currentUser.getUsername());
+            // Ghi log hoạt động đăng xuất
+            try {
+                loginLogDAO.insert(
+                    currentUser.getId(),
+                    currentUser.getUsername(),
+                    currentUser.getFullName(),
+                    currentUser.getRole().name(),
+                    "LOGOUT"
+                );
+            } catch (Exception e) {
+                System.err.println("[AuthService] Lỗi ghi logout log: " + e.getMessage());
+            }
+        }
         currentUser = null;
     }
 
