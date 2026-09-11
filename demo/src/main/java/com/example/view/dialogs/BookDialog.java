@@ -1,7 +1,9 @@
 package com.example.view.dialogs;
 
+import com.example.model.Author;
 import com.example.model.Book;
 import com.example.model.Category;
+import com.example.service.AuthorService;
 import com.example.service.BookService;
 import com.example.service.CategoryService;
 import com.example.view.UITheme;
@@ -20,11 +22,13 @@ public class BookDialog extends JDialog {
 
     private final BookService     bookService     = new BookService();
     private final CategoryService categoryService = new CategoryService();
+    private final AuthorService   authorService   = new AuthorService();
     private final Book            editBook;     // null = thêm mới, non-null = sửa
     private boolean               saved = false;
 
     // ---- Form fields ----
-    private JTextField          fIsbn, fTitle, fAuthor, fPublisher;
+    private JTextField          fIsbn, fTitle, fPublisher;
+    private JComboBox<String>   fAuthor;
     private JComboBox<Category> fCategory;
     private JSpinner            fYear, fTotalCopies, fAvailCopies;
     private JTextArea           fDescription;
@@ -122,13 +126,34 @@ public class BookDialog extends JDialog {
         mainGroup.add(fTitle, g);
         g.gridwidth = 1;
 
-        // Hàng 3: Tác giả (full width)
+        // Hàng 3: Tác giả (chọn từ danh sách hoặc gõ mới, kèm nút ＋)
         g.gridy = 2;
         g.gridx = 0; g.weightx = 0.3;
         mainGroup.add(label("Tác Giả *"), g);
         g.gridx = 1; g.gridwidth = 3; g.weightx = 1.0;
-        fAuthor = UITheme.createTextField("Nhập tên tác giả");
-        mainGroup.add(fAuthor, g);
+
+        JPanel pnlAuthor = new JPanel(new BorderLayout(4, 0));
+        pnlAuthor.setOpaque(false);
+        fAuthor = new JComboBox<>();
+        fAuthor.setEditable(true);
+        fAuthor.setFont(UITheme.FONT_BODY);
+        fAuthor.setPreferredSize(new Dimension(0, UITheme.INPUT_HEIGHT));
+        loadAuthors(null);
+
+        JButton btnQuickAddAuthor = UITheme.createSecondaryButton("＋");
+        btnQuickAddAuthor.setToolTipText("Thêm hồ sơ tác giả mới");
+        btnQuickAddAuthor.setPreferredSize(new Dimension(36, UITheme.INPUT_HEIGHT));
+        btnQuickAddAuthor.addActionListener(e -> {
+            AuthorDialog dlg = new AuthorDialog(this, null);
+            dlg.setVisible(true);
+            if (dlg.isSaved() && dlg.getAuthor() != null) {
+                loadAuthors(dlg.getAuthor().getName());
+            }
+        });
+
+        pnlAuthor.add(fAuthor, BorderLayout.CENTER);
+        pnlAuthor.add(btnQuickAddAuthor, BorderLayout.EAST);
+        mainGroup.add(pnlAuthor, g);
         g.gridwidth = 1;
 
         // Hàng 4: Thể loại + Nhà xuất bản
@@ -277,6 +302,21 @@ public class BookDialog extends JDialog {
     //  Populate / Save / Category Helper
     // ================================================================
 
+    private void loadAuthors(String selectAuthorName) {
+        fAuthor.removeAllItems();
+        fAuthor.addItem("");
+        try {
+            List<Author> authors = authorService.getAllAuthors();
+            for (Author a : authors) {
+                fAuthor.addItem(a.getName());
+            }
+            if (selectAuthorName != null && !selectAuthorName.isBlank()) {
+                fAuthor.getEditor().setItem(selectAuthorName);
+                fAuthor.setSelectedItem(selectAuthorName);
+            }
+        } catch (Exception ignored) {}
+    }
+
     private void loadCategories(String selectCategoryName) {
         fCategory.removeAllItems();
         fCategory.addItem(new Category(0, "-- Chọn thể loại --", ""));
@@ -299,7 +339,7 @@ public class BookDialog extends JDialog {
     private void populateFields(Book book) {
         fIsbn.setText(book.getIsbn());
         fTitle.setText(book.getTitle());
-        fAuthor.setText(book.getAuthor());
+        loadAuthors(book.getAuthor());
         loadCategories(book.getCategory());
         fPublisher.setText(book.getPublisher());
         fYear.setValue(book.getPublishYear() > 0 ? book.getPublishYear() : Year.now().getValue());
@@ -312,7 +352,8 @@ public class BookDialog extends JDialog {
         try {
             String isbn      = fIsbn.getText().trim();
             String title     = fTitle.getText().trim();
-            String author    = fAuthor.getText().trim();
+            Object authorObj = fAuthor.getEditor().getItem();
+            String author    = (authorObj != null) ? authorObj.toString().trim() : "";
             Category selectedCat = (Category) fCategory.getSelectedItem();
             String category  = (selectedCat != null && selectedCat.getId() > 0) ? selectedCat.getName().trim() : "";
             String publisher = fPublisher.getText().trim();

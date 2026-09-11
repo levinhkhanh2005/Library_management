@@ -11,22 +11,59 @@ import java.sql.SQLException;
  */
 public class DatabaseConnection {
 
-    private static String getDbUrl() {
-        File f1 = new File("data" + File.separator + "library.db");
-        File f2 = new File("demo" + File.separator + "data" + File.separator + "library.db");
-        File f3 = new File(".." + File.separator + "data" + File.separator + "library.db");
-
-        if (f1.exists()) {
-            return "jdbc:sqlite:" + f1.getAbsolutePath();
-        } else if (f2.exists()) {
-            return "jdbc:sqlite:" + f2.getAbsolutePath();
-        } else if (f3.exists()) {
-            return "jdbc:sqlite:" + f3.getAbsolutePath();
-        } else {
-            File dataDir = new File("data");
-            if (!dataDir.exists()) dataDir.mkdirs();
-            return "jdbc:sqlite:" + f1.getAbsolutePath();
+    public static File getCanonicalDbFile() {
+        // 1. Nếu chạy từ thư mục gốc dự án, file chuẩn là demo/data/library.db
+        File fDemo = new File("demo" + File.separator + "data" + File.separator + "library.db");
+        if (fDemo.exists()) {
+            return fDemo.getAbsoluteFile();
         }
+        // 2. Nếu chạy từ thư mục demo/, file chuẩn là data/library.db
+        File fData = new File("data" + File.separator + "library.db");
+        if (fData.exists()) {
+            return fData.getAbsoluteFile();
+        }
+        // 3. Nếu chạy từ thư mục con
+        File fParent = new File(".." + File.separator + "data" + File.separator + "library.db");
+        if (fParent.exists()) {
+            return fParent.getAbsoluteFile();
+        }
+
+        File dataDir = new File("data");
+        if (!dataDir.exists()) dataDir.mkdirs();
+        return fData.getAbsoluteFile();
+    }
+
+    private static String getDbUrl() {
+        return "jdbc:sqlite:" + getCanonicalDbFile().getAbsolutePath();
+    }
+
+    /**
+     * Đồng bộ bản sao CSDL giữa data/library.db và demo/data/library.db
+     * để dù chạy ở thư mục gốc hay demo/ dữ liệu cũng luôn 100% đồng nhất.
+     */
+    public static void syncMirrors() {
+        try {
+            File current = getCanonicalDbFile();
+            if (!current.exists()) return;
+
+            // Nếu đang dùng demo/data/library.db, copy sang root data/library.db
+            File parentDir = current.getParentFile().getParentFile(); // demo
+            if (parentDir != null && parentDir.getName().equalsIgnoreCase("demo")) {
+                File rootDir = parentDir.getParentFile();
+                if (rootDir != null) {
+                    File rootDb = new File(rootDir, "data" + File.separator + "library.db");
+                    if (rootDb.getParentFile().exists()) {
+                        java.nio.file.Files.copy(current.toPath(), rootDb.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    }
+                }
+            } else if (current.getName().equalsIgnoreCase("library.db") && current.getParentFile().getName().equalsIgnoreCase("data")) {
+                // Nếu đang dùng root data/library.db, copy sang demo/data/library.db
+                File demoDb = new File(current.getParentFile().getParentFile(), "demo" + File.separator + "data" + File.separator + "library.db");
+                if (demoDb.getParentFile().exists()) {
+                    java.nio.file.Files.copy(current.toPath(), demoDb.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     /** Instance duy nhất (Singleton). */
@@ -89,12 +126,14 @@ public class DatabaseConnection {
             try {
                 if (!connection.isClosed()) {
                     connection.close();
+                    syncMirrors();
                     System.out.println("[DB] Đã đóng kết nối SQLite.");
                 }
             } catch (SQLException e) {
                 System.err.println("[DB] Lỗi khi đóng kết nối: " + e.getMessage());
             } finally {
                 connection = null;
+                syncMirrors();
             }
         }
     }
