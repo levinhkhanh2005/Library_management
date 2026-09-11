@@ -277,7 +277,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         }
     }
 
-    private void openAddDialog() {
+    public void openAddDialog() {
         BookDialog dialog = new BookDialog((Frame) SwingUtilities.getWindowAncestor(this), null);
         dialog.setVisible(true);
         if (dialog.isSaved()) loadData(searchField.getText());
