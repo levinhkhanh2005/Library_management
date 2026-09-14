@@ -12,6 +12,7 @@ import com.example.view.dialogs.BookDialog;
 import com.example.view.dialogs.BookStockAdjustDialog;
 import com.example.view.dialogs.CategoryDistributionDialog;
 import com.example.view.dialogs.CategoryManageDialog;
+import com.example.view.dialogs.PublisherManageDialog;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -131,11 +132,14 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnCategory.setToolTipText("Quản lý danh mục thể loại sách");
         JButton btnAuthor = UITheme.createSecondaryButton("✍️  Tác Giả");
         btnAuthor.setToolTipText("Quản lý danh mục tác giả và đầu sách theo tác giả");
+        JButton btnPublisher = UITheme.createSecondaryButton("🏢  Nhà Xuất Bản");
+        btnPublisher.setToolTipText("Quản lý danh mục nhà xuất bản và đầu sách theo NXB");
         JButton btnRefresh = UITheme.createSecondaryButton("↺  Làm Mới");
 
         btnGroupRight.add(btnChart);
         btnGroupRight.add(btnCategory);
         btnGroupRight.add(btnAuthor);
+        btnGroupRight.add(btnPublisher);
         btnGroupRight.add(btnRefresh);
 
         actionRow.add(btnGroupLeft, BorderLayout.WEST);
@@ -191,6 +195,7 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
         btnChart.addActionListener(e -> openCategoryDistributionDialog());
         btnCategory.addActionListener(e -> openCategoryManageDialog());
         btnAuthor.addActionListener(e -> openAuthorManageDialog());
+        btnPublisher.addActionListener(e -> openPublisherManageDialog());
         btnRefresh.addActionListener(e -> {
             searchField.setText("");
             cbStockFilter.setSelectedIndex(0);
@@ -575,6 +580,14 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
 
     private void openAuthorManageDialog() {
         AuthorManageDialog dialog = new AuthorManageDialog((Frame) SwingUtilities.getWindowAncestor(this));
+        dialog.setVisible(true);
+        if (dialog.isDataChanged()) {
+            loadData(searchField.getText());
+        }
+    }
+
+    private void openPublisherManageDialog() {
+        PublisherManageDialog dialog = new PublisherManageDialog((Frame) SwingUtilities.getWindowAncestor(this));
         dialog.setVisible(true);
         if (dialog.isDataChanged()) {
             loadData(searchField.getText());

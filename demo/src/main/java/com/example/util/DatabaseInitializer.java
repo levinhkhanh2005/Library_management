@@ -119,6 +119,20 @@ public class DatabaseInitializer {
             )
             """;
 
+    private static final String CREATE_TABLE_PUBLISHERS = """
+            CREATE TABLE IF NOT EXISTS publishers (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                name           TEXT    UNIQUE NOT NULL COLLATE NOCASE,
+                address        TEXT,
+                phone          TEXT,
+                email          TEXT,
+                website        TEXT,
+                representative TEXT,
+                description    TEXT,
+                created_at     TEXT    DEFAULT (datetime('now','localtime'))
+            )
+            """;
+
     private static final String CREATE_TABLE_LOGIN_LOGS = """
             CREATE TABLE IF NOT EXISTS login_logs (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,8 +153,10 @@ public class DatabaseInitializer {
         "CREATE INDEX IF NOT EXISTS idx_books_title          ON books(title)",
         "CREATE INDEX IF NOT EXISTS idx_books_author         ON books(author)",
         "CREATE INDEX IF NOT EXISTS idx_books_category       ON books(category)",
+        "CREATE INDEX IF NOT EXISTS idx_books_publisher      ON books(publisher)",
         "CREATE INDEX IF NOT EXISTS idx_categories_name      ON categories(name)",
         "CREATE INDEX IF NOT EXISTS idx_authors_name         ON authors(name)",
+        "CREATE INDEX IF NOT EXISTS idx_publishers_name      ON publishers(name)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_book         ON borrows(book_id)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_reader       ON borrows(reader_id)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_status       ON borrows(status)",
@@ -283,6 +299,7 @@ public class DatabaseInitializer {
             stmt.execute(CREATE_TABLE_SYSTEM_SETTINGS);
             stmt.execute(CREATE_TABLE_EMAIL_LOGS);
             stmt.execute(CREATE_TABLE_AUTHORS);
+            stmt.execute(CREATE_TABLE_PUBLISHERS);
             stmt.execute(CREATE_TABLE_LOGIN_LOGS);
 
             // Migration: thêm cột renew_count nếu DB đã tồn tại từ phiên bản trước
@@ -301,6 +318,28 @@ public class DatabaseInitializer {
             // Migration: đồng bộ các tác giả hiện có trong bảng books vào bảng authors nếu chưa có
             try {
                 stmt.execute("INSERT OR IGNORE INTO authors (name) SELECT DISTINCT TRIM(author) FROM books WHERE author IS NOT NULL AND TRIM(author) != ''");
+            } catch (SQLException ignored) {
+            }
+
+            // Migration: Chuẩn hóa tên NXB trong bảng books về dạng đầy đủ có tiền tố NXB
+            try {
+                stmt.executeUpdate("UPDATE books SET publisher = 'NXB Kim Đồng' WHERE publisher LIKE '%Kim Đồng' AND publisher NOT LIKE 'NXB%'");
+                stmt.executeUpdate("UPDATE books SET publisher = 'NXB Văn Học' WHERE publisher LIKE '%Văn Học' AND publisher NOT LIKE 'NXB%'");
+                stmt.executeUpdate("UPDATE books SET publisher = 'NXB Thông Tin' WHERE publisher LIKE '%Thông Tin' AND publisher NOT LIKE 'NXB%'");
+                stmt.executeUpdate("UPDATE books SET publisher = 'NXB Hội Nhà Văn' WHERE publisher LIKE '%Hội Nhà Văn' AND publisher NOT LIKE 'NXB%'");
+                stmt.executeUpdate("UPDATE books SET publisher = 'NXB Tổng Hợp' WHERE publisher LIKE '%Tổng Hợp' AND publisher NOT LIKE 'NXB%'");
+            } catch (SQLException ignored) {
+            }
+
+            // Migration: Loại bỏ NXB viết tắt nếu đã có NXB chuẩn hóa
+            try {
+                stmt.executeUpdate("DELETE FROM publishers WHERE (name LIKE '%Kim Đồng' OR name LIKE '%Kim Dong') AND name NOT LIKE 'NXB%'");
+            } catch (SQLException ignored) {
+            }
+
+            // Migration: đồng bộ các nhà xuất bản hiện có trong bảng books vào bảng publishers nếu chưa có
+            try {
+                stmt.execute("INSERT OR IGNORE INTO publishers (name) SELECT DISTINCT TRIM(publisher) FROM books WHERE publisher IS NOT NULL AND TRIM(publisher) != ''");
             } catch (SQLException ignored) {
             }
 
@@ -327,7 +366,25 @@ public class DatabaseInitializer {
         "INSERT OR IGNORE INTO authors (name, birth_year, death_year, nationality, biography) VALUES ('Nguyễn Văn An', 1980, NULL, 'Việt Nam', 'Chuyên gia công nghệ thông tin và tác giả nhiều đầu sách lập trình')"
     };
 
-    /** Chèn dữ liệu người dùng, thể loại, tác giả và SMTP mặc định. */
+    /** Dữ liệu mẫu nhà xuất bản */
+    private static final String[] INSERT_DEFAULT_PUBLISHERS = {
+        "INSERT OR IGNORE INTO publishers (name, address, phone, email, website, representative, description) VALUES ('NXB Kim Đồng', '55 Quang Trung, Hai Bà Trưng, Hà Nội', '1900571595', 'cskh@nxbkimdong.com.vn', 'https://nxbkimdong.com.vn', 'Bùi Tuấn Nghĩa', 'Nhà xuất bản chuyên xuất bản sách cho thiếu nhi và thanh thiếu niên')",
+        "INSERT OR IGNORE INTO publishers (name, address, phone, email, website, representative, description) VALUES ('NXB Văn Học', '18 Nguyễn Trường Tộ, Ba Đình, Hà Nội', '02437161518', 'nxbvanhoc@gmail.com', 'http://nxbvanhoc.com.vn', 'Nguyễn Anh Vũ', 'Nhà xuất bản văn học nghệ thuật lâu đời của Việt Nam')",
+        "INSERT OR IGNORE INTO publishers (name, address, phone, email, website, representative, description) VALUES ('NXB Thông Tin', '115 Trần Duy Hưng, Cầu Giấy, Hà Nội', '02435565928', 'nxb.tttt@mic.gov.vn', 'https://nxbthongtintruyenthong.vn', 'Trần Chí Đạt', 'Nhà xuất bản Thông tin và Truyền thông')",
+        "INSERT OR IGNORE INTO publishers (name, address, phone, email, website, representative, description) VALUES ('NXB Hội Nhà Văn', '65 Nguyễn Du, Hai Bà Trưng, Hà Nội', '02438222135', 'nxbhoinhavan@gmail.com', 'http://nxbhoinhavan.vn', 'Trần Đăng Khoa', 'Đơn vị xuất bản trực thuộc Hội Nhà văn Việt Nam')",
+        "INSERT OR IGNORE INTO publishers (name, address, phone, email, website, representative, description) VALUES ('NXB Tổng Hợp', '62 Nguyễn Thị Minh Khai, Đa Kao, Quận 1, TP.HCM', '02838225340', 'tonghop@nxbhcm.com.vn', 'https://nxbhcm.com.vn', 'Đinh Thị Thanh Thủy', 'Nhà xuất bản Tổng hợp Thành phố Hồ Chí Minh')"
+    };
+
+    /** Cập nhật thông tin chi tiết cho các nhà xuất bản mặc định nếu chưa có */
+    private static final String[] UPDATE_DEFAULT_PUBLISHERS_INFO = {
+        "UPDATE publishers SET address = '55 Quang Trung, Hai Bà Trưng, Hà Nội', phone = '1900571595', email = 'cskh@nxbkimdong.com.vn', website = 'https://nxbkimdong.com.vn', representative = 'Bùi Tuấn Nghĩa', description = 'Nhà xuất bản chuyên xuất bản sách cho thiếu nhi và thanh thiếu niên' WHERE name = 'NXB Kim Đồng' AND (address IS NULL OR address = '')",
+        "UPDATE publishers SET address = '18 Nguyễn Trường Tộ, Ba Đình, Hà Nội', phone = '02437161518', email = 'nxbvanhoc@gmail.com', website = 'http://nxbvanhoc.com.vn', representative = 'Nguyễn Anh Vũ', description = 'Nhà xuất bản văn học nghệ thuật lâu đời của Việt Nam' WHERE name = 'NXB Văn Học' AND (address IS NULL OR address = '')",
+        "UPDATE publishers SET address = '115 Trần Duy Hưng, Cầu Giấy, Hà Nội', phone = '02435565928', email = 'nxb.tttt@mic.gov.vn', website = 'https://nxbthongtintruyenthong.vn', representative = 'Trần Chí Đạt', description = 'Nhà xuất bản Thông tin và Truyền thông' WHERE name = 'NXB Thông Tin' AND (address IS NULL OR address = '')",
+        "UPDATE publishers SET address = '65 Nguyễn Du, Hai Bà Trưng, Hà Nội', phone = '02438222135', email = 'nxbhoinhavan@gmail.com', website = 'http://nxbhoinhavan.vn', representative = 'Trần Đăng Khoa', description = 'Đơn vị xuất bản trực thuộc Hội Nhà văn Việt Nam' WHERE name = 'NXB Hội Nhà Văn' AND (address IS NULL OR address = '')",
+        "UPDATE publishers SET address = '62 Nguyễn Thị Minh Khai, Đa Kao, Quận 1, TP.HCM', phone = '02838225340', email = 'tonghop@nxbhcm.com.vn', website = 'https://nxbhcm.com.vn', representative = 'Đinh Thị Thanh Thủy', description = 'Nhà xuất bản Tổng hợp Thành phố Hồ Chí Minh' WHERE name = 'NXB Tổng Hợp' AND (address IS NULL OR address = '')"
+    };
+
+    /** Chèn dữ liệu người dùng, thể loại, tác giả, nhà xuất bản và SMTP mặc định. */
     private static void insertDefaultData(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(INSERT_DEFAULT_ADMIN);
@@ -336,6 +393,12 @@ public class DatabaseInitializer {
                 stmt.execute(sql);
             }
             for (String sql : INSERT_DEFAULT_AUTHORS) {
+                stmt.execute(sql);
+            }
+            for (String sql : INSERT_DEFAULT_PUBLISHERS) {
+                stmt.execute(sql);
+            }
+            for (String sql : UPDATE_DEFAULT_PUBLISHERS_INFO) {
                 stmt.execute(sql);
             }
             for (String sql : INSERT_DEFAULT_SMTP) {
