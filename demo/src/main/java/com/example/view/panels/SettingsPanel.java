@@ -443,7 +443,7 @@ public class SettingsPanel extends JPanel implements MainFrame.Refreshable {
         JPasswordField tPass = UITheme.createPasswordField("mật khẩu");
         JTextField tName = UITheme.createTextField("Họ tên đầy đủ");
         JComboBox<String> tRole = new JComboBox<>(new String[]{
-            User.Role.LIBRARIAN.getLabel(), User.Role.ADMIN.getLabel()});
+            User.Role.LIBRARIAN.getLabel(), User.Role.ADMIN.getLabel(), User.Role.READER.getLabel()});
 
         form.add(new JLabel("Username:")); form.add(tUser);
         form.add(new JLabel("Mật khẩu:")); form.add(tPass);
@@ -473,7 +473,7 @@ public class SettingsPanel extends JPanel implements MainFrame.Refreshable {
         JTextField tName = UITheme.createTextField("");
         tName.setText(u.getFullName());
         JComboBox<String> tRole = new JComboBox<>(new String[]{
-            User.Role.LIBRARIAN.getLabel(), User.Role.ADMIN.getLabel()});
+            User.Role.LIBRARIAN.getLabel(), User.Role.ADMIN.getLabel(), User.Role.READER.getLabel()});
         tRole.setSelectedItem(u.getRole().getLabel());
         form.add(new JLabel("Họ tên:")); form.add(tName);
         form.add(new JLabel("Vai trò:")); form.add(tRole);

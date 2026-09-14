@@ -163,6 +163,16 @@ public class ReaderDAO {
         }
     }
 
+    /** Đếm số độc giả theo trạng thái. */
+    public int countByStatus(Reader.Status status) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM readers WHERE status = ?";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, status.name());
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? rs.getInt(1) : 0;
+        }
+    }
+
     /**
      * Lấy mã thẻ độc giả lớn nhất để tự sinh mã tiếp theo.
      * VD: NDG-0003 → trả về 3.

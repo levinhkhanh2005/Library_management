@@ -1,10 +1,14 @@
 package com.example.service;
 
 import com.example.dao.LoginLogDAO;
+import com.example.dao.ReaderDAO;
 import com.example.dao.UserDAO;
+import com.example.model.Reader;
 import com.example.model.User;
 
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -14,7 +18,10 @@ import java.util.List;
 public class AuthService {
 
     private final UserDAO     userDAO     = new UserDAO();
+    private final ReaderDAO   readerDAO   = new ReaderDAO();
     private final LoginLogDAO loginLogDAO = new LoginLogDAO();
+
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     /** Người dùng đang đăng nhập (null nếu chưa đăng nhập). */
     private static User currentUser = null;
@@ -98,6 +105,92 @@ public class AuthService {
     /** Kiểm tra người dùng hiện tại có quyền Admin không. */
     public static boolean isAdmin() {
         return currentUser != null && currentUser.isAdmin();
+    }
+
+    /** Kiểm tra người dùng hiện tại có phải là Độc giả không. */
+    public static boolean isReader() {
+        return currentUser != null && currentUser.isReader();
+    }
+
+    /** Kiểm tra người dùng hiện tại có quyền quản trị (Admin hoặc Thủ thư) không. */
+    public static boolean isStaff() {
+        return currentUser != null && currentUser.isStaff();
+    }
+
+    // ===================== Đăng ký tài khoản Độc giả =====================
+
+    /**
+     * Đăng ký tài khoản độc giả mới (sau khi đã xác thực OTP thành công).
+     * Quy trình:
+     *   1. Validate dữ liệu đầu vào.
+     *   2. Kiểm tra username và email chưa tồn tại.
+     *   3. Tạo bản ghi Reader trong bảng readers (sinh mã thẻ tự động).
+     *   4. Tạo bản ghi User trong bảng users với role READER, liên kết reader_id.
+     *
+     * @return User vừa tạo
+     * @throws IllegalArgumentException nếu dữ liệu không hợp lệ
+     * @throws SQLException nếu lỗi DB
+     */
+    public User registerReader(String username, String password, String fullName,
+                               String email, String phone, String birthDate,
+                               String address) throws SQLException {
+        // 1. Validate
+        validateRequired(username, "Tên đăng nhập");
+        validateRequired(password, "Mật khẩu");
+        validateRequired(fullName, "Họ tên");
+        validateRequired(email, "Email");
+
+        if (username.trim().length() < 4) {
+            throw new IllegalArgumentException("Tên đăng nhập phải có ít nhất 4 ký tự.");
+        }
+        if (password.length() < 6) {
+            throw new IllegalArgumentException("Mật khẩu phải có ít nhất 6 ký tự.");
+        }
+        if (!email.trim().matches("^[\\w.+-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            throw new IllegalArgumentException("Email không hợp lệ.");
+        }
+
+        // 2. Kiểm tra trùng lặp
+        if (userDAO.isUsernameExists(username.trim())) {
+            throw new IllegalArgumentException("Tên đăng nhập \"" + username.trim() + "\" đã tồn tại.");
+        }
+        if (userDAO.isEmailExists(email.trim())) {
+            throw new IllegalArgumentException("Email \"" + email.trim() + "\" đã được sử dụng.");
+        }
+
+        // 3. Tạo Reader (thẻ thư viện)
+        int maxNum = readerDAO.getMaxReaderCodeNumber();
+        String readerCode = String.format("NDG-%04d", maxNum + 1);
+        String today = LocalDate.now().format(DATE_FMT);
+
+        Reader reader = new Reader(
+            readerCode,
+            fullName.trim(),
+            birthDate == null ? "" : birthDate.trim(),
+            phone == null ? "" : phone.trim(),
+            email.trim(),
+            address == null ? "" : address.trim(),
+            today
+        );
+        // Đặt hạn thẻ 1 năm
+        reader.setExpiryDate(LocalDate.now().plusYears(1).format(DATE_FMT));
+
+        int readerId = readerDAO.insert(reader);
+        if (readerId == -1) throw new SQLException("Tạo thẻ độc giả thất bại.");
+        reader.setId(readerId);
+
+        // 4. Tạo User liên kết
+        User user = new User(
+            username.trim(), password, fullName.trim(),
+            email.trim(), User.Role.READER, readerId
+        );
+        int userId = userDAO.insert(user);
+        if (userId == -1) throw new SQLException("Tạo tài khoản thất bại.");
+        user.setId(userId);
+
+        System.out.println("[AUTH] Đăng ký thành công: " + user.getFullName()
+            + " (Mã thẻ: " + readerCode + ")");
+        return user;
     }
 
     // ===================== Quản lý tài khoản =====================

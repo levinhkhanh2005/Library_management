@@ -4,7 +4,7 @@ import com.example.service.BorrowService;
 import com.example.util.DatabaseConnection;
 import com.example.util.DatabaseInitializer;
 import com.example.view.LoginDialog;
-import com.example.view.MainFrame;
+import com.example.view.ReaderPortalFrame;
 import com.example.view.UITheme;
 
 import javax.swing.*;
@@ -34,10 +34,9 @@ public class App {
                 LoginDialog login = new LoginDialog(null);
                 login.setVisible(true);
 
-                // 6. Nếu đăng nhập thành công → mở cửa sổ chính
+                // 6. Nếu đăng nhập thành công → mở cửa sổ tương ứng với vai trò
                 if (login.isLoginSuccess()) {
-                    MainFrame mainFrame = new MainFrame();
-                    mainFrame.setVisible(true);
+                    ReaderPortalFrame.openFrameForCurrentUser();
                 }
                 // Nếu đóng login mà không đăng nhập → thoát ứng dụng
                 else {
@@ -59,4 +58,4 @@ public class App {
             System.out.println("[APP] Ứng dụng đã tắt.");
         }));
     }
-}
+}
