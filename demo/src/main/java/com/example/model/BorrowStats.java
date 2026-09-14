@@ -149,7 +149,7 @@ public class BorrowStats {
      * Tiền phạt định dạng tiền tệ VNĐ (VD: "120.000 đ").
      */
     public String getFormattedTotalFines() {
-        NumberFormat nf = NumberFormat.getInstance(new Locale("vi", "VN"));
+        NumberFormat nf = NumberFormat.getInstance(Locale.forLanguageTag("vi-VN"));
         return nf.format((long) totalFines) + " đ";
     }
 }

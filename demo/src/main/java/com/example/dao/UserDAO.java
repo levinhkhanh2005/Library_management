@@ -23,15 +23,17 @@ public class UserDAO {
      */
     public int insert(User user) throws SQLException {
         String sql = """
-                INSERT INTO users (username, password, full_name, role, active)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO users (username, password, full_name, email, role, active, reader_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement ps = getConn().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString (1, user.getUsername());
             ps.setString (2, user.getPassword());
             ps.setString (3, user.getFullName());
-            ps.setString (4, user.getRole().name());
-            ps.setBoolean(5, user.isActive());
+            ps.setString (4, user.getEmail());
+            ps.setString (5, user.getRole().name());
+            ps.setBoolean(6, user.isActive());
+            ps.setInt    (7, user.getReaderId());
             ps.executeUpdate();
 
             ResultSet keys = ps.getGeneratedKeys();
@@ -43,15 +45,17 @@ public class UserDAO {
 
     public boolean update(User user) throws SQLException {
         String sql = """
-                UPDATE users SET username=?, full_name=?, role=?, active=?
+                UPDATE users SET username=?, full_name=?, email=?, role=?, active=?, reader_id=?
                 WHERE id=?
                 """;
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString (1, user.getUsername());
             ps.setString (2, user.getFullName());
-            ps.setString (3, user.getRole().name());
-            ps.setBoolean(4, user.isActive());
-            ps.setInt    (5, user.getId());
+            ps.setString (3, user.getEmail());
+            ps.setString (4, user.getRole().name());
+            ps.setBoolean(5, user.isActive());
+            ps.setInt    (6, user.getReaderId());
+            ps.setInt    (7, user.getId());
             return ps.executeUpdate() > 0;
         }
     }
@@ -97,6 +101,15 @@ public class UserDAO {
         }
     }
 
+    /** Lấy danh sách người dùng theo vai trò. */
+    public List<User> findByRole(User.Role role) throws SQLException {
+        String sql = "SELECT * FROM users WHERE role = ? ORDER BY full_name";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, role.name());
+            return mapList(ps.executeQuery());
+        }
+    }
+
     /** Tìm người dùng theo id. */
     public User findById(int id) throws SQLException {
         String sql = "SELECT * FROM users WHERE id = ?";
@@ -112,6 +125,26 @@ public class UserDAO {
         String sql = "SELECT * FROM users WHERE username = ?";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, username);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? mapRow(rs) : null;
+        }
+    }
+
+    /** Tìm người dùng theo email. */
+    public User findByEmail(String email) throws SQLException {
+        String sql = "SELECT * FROM users WHERE email = ?";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, email);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? mapRow(rs) : null;
+        }
+    }
+
+    /** Tìm người dùng theo reader_id (liên kết với bảng readers). */
+    public User findByReaderId(int readerId) throws SQLException {
+        String sql = "SELECT * FROM users WHERE reader_id = ?";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, readerId);
             ResultSet rs = ps.executeQuery();
             return rs.next() ? mapRow(rs) : null;
         }
@@ -141,6 +174,27 @@ public class UserDAO {
         }
     }
 
+    /** Kiểm tra email đã tồn tại chưa (dùng khi đăng ký). */
+    public boolean isEmailExists(String email) throws SQLException {
+        if (email == null || email.isBlank()) return false;
+        String sql = "SELECT COUNT(*) FROM users WHERE email = ?";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, email);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() && rs.getInt(1) > 0;
+        }
+    }
+
+    /** Đếm tổng số người dùng theo vai trò. */
+    public int countByRole(User.Role role) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM users WHERE role = ?";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, role.name());
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? rs.getInt(1) : 0;
+        }
+    }
+
     // ===================== Mapping =====================
 
     private List<User> mapList(ResultSet rs) throws SQLException {
@@ -150,13 +204,22 @@ public class UserDAO {
     }
 
     private User mapRow(ResultSet rs) throws SQLException {
+        // Đọc email và reader_id an toàn (tương thích DB cũ chưa có cột)
+        String email = null;
+        int readerId = 0;
+        try { email = rs.getString("email"); } catch (SQLException ignored) {}
+        try { readerId = rs.getInt("reader_id"); } catch (SQLException ignored) {}
+
         return new User(
             rs.getInt    ("id"),
             rs.getString ("username"),
             rs.getString ("password"),
             rs.getString ("full_name"),
+            email,
             User.Role.fromString(rs.getString("role")),
-            rs.getBoolean("active")
+            rs.getBoolean("active"),
+            readerId
         );
     }
 }
+

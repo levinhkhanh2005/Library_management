@@ -8,7 +8,6 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
-import java.time.Year;
 
 /**
  * Dialog thêm mới hoặc chỉnh sửa thông tin tác giả.
