@@ -3,9 +3,11 @@ package com.example.view.dialogs;
 import com.example.model.Author;
 import com.example.model.Book;
 import com.example.model.Category;
+import com.example.model.Publisher;
 import com.example.service.AuthorService;
 import com.example.service.BookService;
 import com.example.service.CategoryService;
+import com.example.service.PublisherService;
 import com.example.view.UITheme;
 
 import javax.swing.*;
@@ -20,16 +22,18 @@ import java.util.List;
  */
 public class BookDialog extends JDialog {
 
-    private final BookService     bookService     = new BookService();
-    private final CategoryService categoryService = new CategoryService();
-    private final AuthorService   authorService   = new AuthorService();
-    private final Book            editBook;     // null = thêm mới, non-null = sửa
-    private boolean               saved = false;
+    private final BookService      bookService      = new BookService();
+    private final CategoryService  categoryService  = new CategoryService();
+    private final AuthorService    authorService    = new AuthorService();
+    private final PublisherService publisherService = new PublisherService();
+    private final Book             editBook;     // null = thêm mới, non-null = sửa
+    private boolean                saved = false;
 
     // ---- Form fields ----
-    private JTextField          fIsbn, fTitle, fPublisher;
+    private JTextField          fIsbn, fTitle;
     private JComboBox<String>   fAuthor;
     private JComboBox<Category> fCategory;
+    private JComboBox<String>   fPublisher;
     private JSpinner            fYear, fTotalCopies, fAvailCopies;
     private JTextArea           fDescription;
 
@@ -187,8 +191,29 @@ public class BookDialog extends JDialog {
         g.gridx = 2; g.weightx = 0.2;
         mainGroup.add(label("Nhà XB"), g);
         g.gridx = 3; g.weightx = 0.3;
-        fPublisher = UITheme.createTextField("Tên NXB");
-        mainGroup.add(fPublisher, g);
+
+        JPanel pnlPub = new JPanel(new BorderLayout(4, 0));
+        pnlPub.setOpaque(false);
+        fPublisher = new JComboBox<>();
+        fPublisher.setEditable(true);
+        fPublisher.setFont(UITheme.FONT_BODY);
+        fPublisher.setPreferredSize(new Dimension(0, UITheme.INPUT_HEIGHT));
+        loadPublishers(null);
+
+        JButton btnQuickAddPub = UITheme.createSecondaryButton("＋");
+        btnQuickAddPub.setToolTipText("Thêm nhà xuất bản mới");
+        btnQuickAddPub.setPreferredSize(new Dimension(36, UITheme.INPUT_HEIGHT));
+        btnQuickAddPub.addActionListener(e -> {
+            PublisherDialog dlg = new PublisherDialog(this, null);
+            dlg.setVisible(true);
+            if (dlg.isSaved() && dlg.getPublisher() != null) {
+                loadPublishers(dlg.getPublisher().getName());
+            }
+        });
+
+        pnlPub.add(fPublisher, BorderLayout.CENTER);
+        pnlPub.add(btnQuickAddPub, BorderLayout.EAST);
+        mainGroup.add(pnlPub, g);
 
         form.add(mainGroup, BorderLayout.NORTH);
 
@@ -336,12 +361,38 @@ public class BookDialog extends JDialog {
         } catch (Exception ignored) {}
     }
 
+    private void loadPublishers(String selectPublisherName) {
+        fPublisher.removeAllItems();
+        fPublisher.addItem("");
+        try {
+            List<Publisher> publishers = publisherService.getAllPublishers();
+            String matchedToSelect = null;
+            for (Publisher p : publishers) {
+                fPublisher.addItem(p.getName());
+                if (selectPublisherName != null && !selectPublisherName.isBlank()) {
+                    String sel = selectPublisherName.trim().toLowerCase();
+                    String pName = p.getName().trim().toLowerCase();
+                    if (sel.equals(pName) || ("nxb " + sel).equals(pName) || sel.equals(pName.replace("nxb ", ""))) {
+                        matchedToSelect = p.getName();
+                    }
+                }
+            }
+            if (matchedToSelect != null) {
+                fPublisher.getEditor().setItem(matchedToSelect);
+                fPublisher.setSelectedItem(matchedToSelect);
+            } else if (selectPublisherName != null && !selectPublisherName.isBlank()) {
+                fPublisher.getEditor().setItem(selectPublisherName);
+                fPublisher.setSelectedItem(selectPublisherName);
+            }
+        } catch (Exception ignored) {}
+    }
+
     private void populateFields(Book book) {
         fIsbn.setText(book.getIsbn());
         fTitle.setText(book.getTitle());
         loadAuthors(book.getAuthor());
         loadCategories(book.getCategory());
-        fPublisher.setText(book.getPublisher());
+        loadPublishers(book.getPublisher());
         fYear.setValue(book.getPublishYear() > 0 ? book.getPublishYear() : Year.now().getValue());
         fTotalCopies.setValue(book.getTotalCopies());
         fAvailCopies.setValue(book.getAvailableCopies());
@@ -356,7 +407,8 @@ public class BookDialog extends JDialog {
             String author    = (authorObj != null) ? authorObj.toString().trim() : "";
             Category selectedCat = (Category) fCategory.getSelectedItem();
             String category  = (selectedCat != null && selectedCat.getId() > 0) ? selectedCat.getName().trim() : "";
-            String publisher = fPublisher.getText().trim();
+            Object pubObj    = fPublisher.getEditor().getItem();
+            String publisher = (pubObj != null) ? pubObj.toString().trim() : "";
             int    year      = (Integer) fYear.getValue();
             int    total     = (Integer) fTotalCopies.getValue();
             int    avail     = (Integer) fAvailCopies.getValue();
