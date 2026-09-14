@@ -145,6 +145,20 @@ public class DatabaseInitializer {
             )
             """;
 
+    private static final String CREATE_TABLE_OTP_VERIFICATIONS = """
+            CREATE TABLE IF NOT EXISTS otp_verifications (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                email       TEXT    NOT NULL,
+                otp_code    TEXT    NOT NULL,
+                type        TEXT    NOT NULL DEFAULT 'REGISTER',
+                payload     TEXT,
+                expires_at  TEXT    NOT NULL,
+                attempts    INTEGER NOT NULL DEFAULT 0,
+                is_verified INTEGER NOT NULL DEFAULT 0,
+                created_at  TEXT    DEFAULT (datetime('now','localtime'))
+            )
+            """;
+
     // ============================================================
     //  Index để tăng tốc truy vấn
     // ============================================================
@@ -161,7 +175,10 @@ public class DatabaseInitializer {
         "CREATE INDEX IF NOT EXISTS idx_borrows_reader       ON borrows(reader_id)",
         "CREATE INDEX IF NOT EXISTS idx_borrows_status       ON borrows(status)",
         "CREATE INDEX IF NOT EXISTS idx_login_logs_logged_at ON login_logs(logged_at)",
-        "CREATE INDEX IF NOT EXISTS idx_login_logs_action    ON login_logs(action)"
+        "CREATE INDEX IF NOT EXISTS idx_login_logs_action    ON login_logs(action)",
+        "CREATE INDEX IF NOT EXISTS idx_otp_email_type       ON otp_verifications(email, type)",
+        "CREATE INDEX IF NOT EXISTS idx_users_email          ON users(email)",
+        "CREATE INDEX IF NOT EXISTS idx_users_reader_id      ON users(reader_id)"
     };
 
     // ============================================================
@@ -301,10 +318,25 @@ public class DatabaseInitializer {
             stmt.execute(CREATE_TABLE_AUTHORS);
             stmt.execute(CREATE_TABLE_PUBLISHERS);
             stmt.execute(CREATE_TABLE_LOGIN_LOGS);
+            stmt.execute(CREATE_TABLE_OTP_VERIFICATIONS);
 
             // Migration: thêm cột renew_count nếu DB đã tồn tại từ phiên bản trước
             try {
                 stmt.execute("ALTER TABLE borrows ADD COLUMN renew_count INTEGER DEFAULT 0");
+            } catch (SQLException ignored) {
+                // Cột đã tồn tại
+            }
+
+            // Migration: thêm cột email vào bảng users (cho OTP và liên hệ)
+            try {
+                stmt.execute("ALTER TABLE users ADD COLUMN email TEXT");
+            } catch (SQLException ignored) {
+                // Cột đã tồn tại
+            }
+
+            // Migration: thêm cột reader_id vào bảng users (liên kết với bảng readers)
+            try {
+                stmt.execute("ALTER TABLE users ADD COLUMN reader_id INTEGER DEFAULT 0");
             } catch (SQLException ignored) {
                 // Cột đã tồn tại
             }

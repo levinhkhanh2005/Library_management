@@ -1,7 +1,9 @@
 package com.example.service;
 
 import com.example.dao.ReaderDAO;
+import com.example.dao.UserDAO;
 import com.example.model.Reader;
+import com.example.model.User;
 
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -14,6 +16,7 @@ import java.util.List;
 public class ReaderService {
 
     private final ReaderDAO readerDAO = new ReaderDAO();
+    private final UserDAO   userDAO   = new UserDAO();
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     // ===================== Thêm độc giả =====================
@@ -60,10 +63,19 @@ public class ReaderService {
         }
     }
 
-    /** Thay đổi trạng thái tài khoản (khóa / mở khóa). */
+    /** Thay đổi trạng thái tài khoản (khóa / mở khóa) và đồng bộ tài khoản đăng nhập. */
     public void setReaderStatus(int readerId, Reader.Status status) throws SQLException {
         if (!readerDAO.updateStatus(readerId, status)) {
             throw new SQLException("Cập nhật trạng thái thất bại.");
+        }
+        // Đồng bộ trạng thái tài khoản người dùng tương ứng (nếu có)
+        try {
+            User u = userDAO.findByReaderId(readerId);
+            if (u != null) {
+                userDAO.setActive(u.getId(), status == Reader.Status.ACTIVE);
+            }
+        } catch (Exception e) {
+            System.err.println("[ReaderService] Không thể đồng bộ user active: " + e.getMessage());
         }
     }
 
@@ -79,6 +91,68 @@ public class ReaderService {
                 "Không thể xóa độc giả \"" + reader.getFullName() + "\".\n" +
                 "Có thể họ vẫn còn phiếu mượn trong hệ thống."
             );
+        }
+        // Xóa hoặc vô hiệu hóa tài khoản liên kết nếu có
+        try {
+            User u = userDAO.findByReaderId(reader.getId());
+            if (u != null) {
+                userDAO.delete(u.getId());
+            }
+        } catch (Exception ignored) {}
+    }
+
+    // ===================== Quản lý tài khoản đăng nhập độc giả =====================
+
+    /** Lấy tài khoản người dùng liên kết với độc giả. */
+    public User getUserForReader(int readerId) throws SQLException {
+        return userDAO.findByReaderId(readerId);
+    }
+
+    /** Lấy danh sách tất cả tài khoản độc giả (role = READER). */
+    public List<User> getAllReaderAccounts() throws SQLException {
+        return userDAO.findByRole(User.Role.READER);
+    }
+
+    /**
+     * Cấp mới hoặc đặt lại mật khẩu cho độc giả.
+     * @return User sau khi tạo hoặc cập nhật
+     */
+    public User createOrResetReaderAccount(int readerId, String username, String newPassword) throws SQLException {
+        validateRequired(newPassword, "Mật khẩu");
+        if (newPassword.length() < 6) {
+            throw new IllegalArgumentException("Mật khẩu phải có ít nhất 6 ký tự.");
+        }
+
+        Reader reader = readerDAO.findById(readerId);
+        if (reader == null) {
+            throw new IllegalArgumentException("Độc giả không tồn tại.");
+        }
+
+        User existingUser = userDAO.findByReaderId(readerId);
+        if (existingUser != null) {
+            // Đã có tài khoản -> Đổi mật khẩu
+            userDAO.updatePassword(existingUser.getId(), newPassword);
+            return existingUser;
+        } else {
+            // Chưa có tài khoản -> Tạo mới
+            validateRequired(username, "Tên đăng nhập");
+            String uname = username.trim();
+            if (uname.length() < 3) {
+                throw new IllegalArgumentException("Tên đăng nhập phải có ít nhất 3 ký tự.");
+            }
+            if (userDAO.isUsernameExists(uname)) {
+                throw new IllegalArgumentException("Tên đăng nhập \"" + uname + "\" đã tồn tại.");
+            }
+
+            User newUser = new User(
+                0, uname, newPassword, reader.getFullName(),
+                reader.getEmail(), User.Role.READER,
+                reader.getStatus() == Reader.Status.ACTIVE,
+                readerId
+            );
+            int uid = userDAO.insert(newUser);
+            newUser.setId(uid);
+            return newUser;
         }
     }
 
@@ -106,6 +180,14 @@ public class ReaderService {
 
     public int getActiveReaders() throws SQLException {
         return readerDAO.countActive();
+    }
+
+    public int getLockedReaders() throws SQLException {
+        return readerDAO.countByStatus(Reader.Status.LOCKED);
+    }
+
+    public int getPortalAccountCount() throws SQLException {
+        return userDAO.countByRole(User.Role.READER);
     }
 
     /**

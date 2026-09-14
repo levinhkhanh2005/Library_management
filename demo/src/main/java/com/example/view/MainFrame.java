@@ -183,7 +183,6 @@ public class MainFrame extends JFrame {
         rightSection.add(sep2);
 
         // Avatar + tên người dùng
-        AuthService auth = new AuthService();
         var currentUser  = AuthService.getCurrentUser();
         String displayName = currentUser != null ? currentUser.getFullName() : "Người dùng";
         String roleName    = currentUser != null ? currentUser.getRole().getLabel() : "";
@@ -381,7 +380,7 @@ public class MainFrame extends JFrame {
             LoginDialog login = new LoginDialog(null);
             login.setVisible(true);
             if (login.isLoginSuccess()) {
-                new MainFrame().setVisible(true);
+                ReaderPortalFrame.openFrameForCurrentUser();
             } else {
                 DatabaseConnection.getInstance().closeConnection();
                 System.exit(0);

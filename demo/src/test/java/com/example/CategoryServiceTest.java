@@ -4,13 +4,10 @@ import com.example.model.Book;
 import com.example.model.Category;
 import com.example.service.BookService;
 import com.example.service.CategoryService;
-import com.example.util.DatabaseConnection;
 import com.example.util.DatabaseInitializer;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.sql.Connection;
-import java.sql.Statement;
 import java.util.List;
 
 import static org.junit.Assert.*;

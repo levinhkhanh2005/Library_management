@@ -351,7 +351,7 @@ public class ActivityPanel extends JPanel implements MainFrame.Refreshable {
             int idx = 0;
             DateTimeFormatter inFmt  = DateTimeFormatter.ofPattern("yyyy-MM-dd");
             DateTimeFormatter dayFmt = DateTimeFormatter.ofPattern("EEE\ndd/MM",
-                    new java.util.Locale("vi", "VN"));
+                    java.util.Locale.forLanguageTag("vi-VN"));
 
             for (Map.Entry<String, Integer> entry : data.entrySet()) {
                 int val  = entry.getValue();

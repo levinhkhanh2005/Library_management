@@ -2,6 +2,7 @@ package com.example.view;
 
 import com.example.model.User;
 import com.example.service.AuthService;
+import com.example.view.dialogs.RegisterDialog;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -317,6 +318,25 @@ public class LoginDialog extends JDialog {
         hintPanel.add(hintCreds);
         form.add(hintPanel, gbc);
 
+        // Link đăng ký tài khoản
+        gbc.gridy++; gbc.insets = new Insets(12, 0, 0, 0);
+        JPanel registerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
+        registerPanel.setOpaque(false);
+        JLabel regLabel = new JLabel("Chưa có tài khoản?");
+        regLabel.setFont(UITheme.FONT_SMALL);
+        regLabel.setForeground(UITheme.TEXT_MUTED);
+        registerPanel.add(regLabel);
+
+        JButton btnRegister = new JButton("Đăng ký ngay");
+        btnRegister.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 11));
+        btnRegister.setForeground(UITheme.ACCENT_PRIMARY);
+        btnRegister.setBorderPainted(false);
+        btnRegister.setContentAreaFilled(false);
+        btnRegister.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btnRegister.addActionListener(e -> openRegisterDialog());
+        registerPanel.add(btnRegister);
+        form.add(registerPanel, gbc);
+
         // --- Sự kiện ---
         loginButton.addActionListener(e -> doLogin());
         // Enter để đăng nhập
@@ -329,6 +349,16 @@ public class LoginDialog extends JDialog {
         passwordField.addKeyListener(enterKey);
 
         return form;
+    }
+
+    /**
+     * Mở dialog đăng ký tài khoản độc giả.
+     * Nếu đăng ký thành công, tự điền username vào ô đăng nhập.
+     */
+    private void openRegisterDialog() {
+        RegisterDialog dialog = new RegisterDialog(this);
+        dialog.setVisible(true);
+        // Không cần xử lý thêm — người dùng tự đăng nhập sau khi đăng ký
     }
 
     // ================================================================

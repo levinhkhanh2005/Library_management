@@ -26,7 +26,6 @@ public class BookStockAdjustDialog extends JDialog {
     private JTextArea    txtNotes;
     private JLabel       lblCurrentTotal;
     private JLabel       lblCurrentAvail;
-    private JLabel       lblCurrentBorrowed;
     private JLabel       lblHint;
 
     public BookStockAdjustDialog(Frame parent, Book book, boolean defaultToImport) {
@@ -78,7 +77,6 @@ public class BookStockAdjustDialog extends JDialog {
         JLabel lblAuthor = new JLabel("<html><b>Tác giả:</b> " + escapeHtml(book.getAuthor()) + "</html>");
         lblCurrentTotal = new JLabel("Tổng số bản hiện có: " + book.getTotalCopies());
         lblCurrentAvail = new JLabel("Bản có sẵn: " + book.getAvailableCopies());
-        lblCurrentBorrowed = new JLabel("Đang mượn: " + book.getBorrowedCopies());
 
         lblTitle.setFont(UITheme.FONT_BODY);
         lblAuthor.setFont(UITheme.FONT_BODY);
