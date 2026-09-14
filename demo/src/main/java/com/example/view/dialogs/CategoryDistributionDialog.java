@@ -26,9 +26,14 @@ public class CategoryDistributionDialog extends JDialog {
     private JTable table;
     private JRadioButton rbTitleCount;
     private JRadioButton rbTotalCopies;
+    private JRadioButton rbGroupCategory;
+    private JRadioButton rbGroupMajor;
+    private boolean isGroupByMajor = false;
     private JLabel lblTotalCategories;
     private JLabel lblTopCategory;
     private JLabel lblTotalBooksCount;
+    private JLabel lblStatGroupTitle;
+    private JButton btnFilterThisCategory;
     private String selectedCategoryForFilter = null;
     private Consumer<String> onCategoryFilterCallback;
 
@@ -64,12 +69,40 @@ public class CategoryDistributionDialog extends JDialog {
         JPanel switchPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         switchPanel.setOpaque(false);
 
-        JLabel lblMode = new JLabel("Thống kê theo:");
+        JLabel lblGroup = new JLabel("Nhóm theo:");
+        lblGroup.setFont(UITheme.FONT_BOLD);
+        lblGroup.setForeground(Color.WHITE);
+
+        rbGroupCategory = new JRadioButton("Thể Loại", true);
+        rbGroupMajor = new JRadioButton("Khối Ngành", false);
+        rbGroupCategory.setFont(UITheme.FONT_BOLD);
+        rbGroupMajor.setFont(UITheme.FONT_BOLD);
+        rbGroupCategory.setForeground(Color.WHITE);
+        rbGroupMajor.setForeground(Color.WHITE);
+        rbGroupCategory.setOpaque(false);
+        rbGroupMajor.setOpaque(false);
+
+        ButtonGroup bgGroup = new ButtonGroup();
+        bgGroup.add(rbGroupCategory);
+        bgGroup.add(rbGroupMajor);
+
+        rbGroupCategory.addActionListener(e -> {
+            isGroupByMajor = false;
+            if (lblStatGroupTitle != null) lblStatGroupTitle.setText("Số Thể Loại");
+            loadData(rbTitleCount.isSelected());
+        });
+        rbGroupMajor.addActionListener(e -> {
+            isGroupByMajor = true;
+            if (lblStatGroupTitle != null) lblStatGroupTitle.setText("Số Khối Ngành");
+            loadData(rbTitleCount.isSelected());
+        });
+
+        JLabel lblMode = new JLabel("  |  Thống kê:");
         lblMode.setFont(UITheme.FONT_BOLD);
         lblMode.setForeground(Color.WHITE);
 
-        rbTitleCount = new JRadioButton("Số Đầu Sách", true);
-        rbTotalCopies = new JRadioButton("Tổng Bản Sao", false);
+        rbTitleCount = new JRadioButton("Đầu Sách", true);
+        rbTotalCopies = new JRadioButton("Bản Sao", false);
         rbTitleCount.setFont(UITheme.FONT_BOLD);
         rbTotalCopies.setFont(UITheme.FONT_BOLD);
         rbTitleCount.setForeground(Color.WHITE);
@@ -77,13 +110,16 @@ public class CategoryDistributionDialog extends JDialog {
         rbTitleCount.setOpaque(false);
         rbTotalCopies.setOpaque(false);
 
-        ButtonGroup bg = new ButtonGroup();
-        bg.add(rbTitleCount);
-        bg.add(rbTotalCopies);
+        ButtonGroup bgMode = new ButtonGroup();
+        bgMode.add(rbTitleCount);
+        bgMode.add(rbTotalCopies);
 
         rbTitleCount.addActionListener(e -> loadData(true));
         rbTotalCopies.addActionListener(e -> loadData(false));
 
+        switchPanel.add(lblGroup);
+        switchPanel.add(rbGroupCategory);
+        switchPanel.add(rbGroupMajor);
         switchPanel.add(lblMode);
         switchPanel.add(rbTitleCount);
         switchPanel.add(rbTotalCopies);
@@ -139,7 +175,8 @@ public class CategoryDistributionDialog extends JDialog {
         lblTopCategory = new JLabel("—", SwingConstants.CENTER);
         lblTotalBooksCount = new JLabel("—", SwingConstants.CENTER);
 
-        statsRow.add(createStatBox("Số Thể Loại", lblTotalCategories, UITheme.ACCENT_PRIMARY));
+        lblStatGroupTitle = new JLabel("Số Thể Loại", SwingConstants.CENTER);
+        statsRow.add(createStatBox("Danh Mục / Ngành", lblTotalCategories, UITheme.ACCENT_PRIMARY));
         statsRow.add(createStatBox("Nhiều Nhất", lblTopCategory, UITheme.COLOR_SUCCESS));
         statsRow.add(createStatBox("Tổng Sách", lblTotalBooksCount, UITheme.COLOR_INFO));
         rightCard.add(statsRow, BorderLayout.NORTH);
@@ -200,17 +237,17 @@ public class CategoryDistributionDialog extends JDialog {
         JScrollPane spTable = UITheme.createTableScrollPane(table);
         rightCard.add(spTable, BorderLayout.CENTER);
 
-        // Nút lọc theo thể loại đang chọn
+        // Nút lọc theo thể loại / ngành đang chọn
         JPanel tableBottom = new JPanel(new BorderLayout(8, 0));
         tableBottom.setOpaque(false);
-        JButton btnFilterThisCategory = UITheme.createPrimaryButton("🔍  Lọc Sách Theo Thể Loại Đang Chọn");
+        btnFilterThisCategory = UITheme.createPrimaryButton("🔍  Lọc Sách Theo Danh Mục Đang Chọn");
         btnFilterThisCategory.addActionListener(e -> {
             int row = table.getSelectedRow();
             if (row >= 0) {
                 String cat = (String) tableModel.getValueAt(row, 1);
                 applyFilterAndClose(cat);
             } else {
-                UITheme.showWarning(this, "Vui lòng chọn một thể loại trong bảng hoặc biểu đồ.");
+                UITheme.showWarning(this, "Vui lòng chọn một danh mục/ngành trong bảng hoặc biểu đồ.");
             }
         });
         tableBottom.add(btnFilterThisCategory, BorderLayout.CENTER);
@@ -231,16 +268,29 @@ public class CategoryDistributionDialog extends JDialog {
     }
 
     private void loadData(boolean byTitle) {
-        SwingWorker<List<CategoryBookStat>, Void> worker = new SwingWorker<>() {
+        SwingWorker<List<com.example.model.CategoryBookStat>, Void> worker = new SwingWorker<>() {
             @Override
-            protected List<CategoryBookStat> doInBackground() throws Exception {
-                return bookService.getCategoryDistribution(byTitle);
+            protected List<com.example.model.CategoryBookStat> doInBackground() throws Exception {
+                if (isGroupByMajor) {
+                    List<com.example.model.MajorBookStat> majors = bookService.getMajorDistribution(byTitle);
+                    List<com.example.model.CategoryBookStat> converted = new java.util.ArrayList<>();
+                    for (com.example.model.MajorBookStat ms : majors) {
+                        com.example.model.CategoryBookStat cs = new com.example.model.CategoryBookStat(
+                            ms.getMajorName(), ms.getTitleCount(), ms.getTotalCopies(), ms.getAvailableCopies()
+                        );
+                        cs.setPercentage(ms.getPercentage());
+                        converted.add(cs);
+                    }
+                    return converted;
+                } else {
+                    return bookService.getCategoryDistribution(byTitle);
+                }
             }
 
             @Override
             protected void done() {
                 try {
-                    List<CategoryBookStat> stats = get();
+                    List<com.example.model.CategoryBookStat> stats = get();
                     pieChartPanel.setData(stats, byTitle);
 
                     tableModel.setRowCount(0);
@@ -250,7 +300,7 @@ public class CategoryDistributionDialog extends JDialog {
                     double maxPct = -1;
 
                     for (int i = 0; i < stats.size(); i++) {
-                        CategoryBookStat s = stats.get(i);
+                        com.example.model.CategoryBookStat s = stats.get(i);
                         totalTitles += s.getTitleCount();
                         totalCopies += s.getTotalCopies();
                         Color c = pieChartPanel.getColorForIndex(i);
@@ -269,12 +319,17 @@ public class CategoryDistributionDialog extends JDialog {
                         }
                     }
 
-                    lblTotalCategories.setText(String.valueOf(stats.size()));
+                    lblTotalCategories.setText(stats.size() + (isGroupByMajor ? " ngành" : " loại"));
                     lblTopCategory.setText(topName);
                     lblTotalBooksCount.setText(byTitle ? (totalTitles + " đầu sách") : (totalCopies + " bản"));
+                    if (btnFilterThisCategory != null) {
+                        btnFilterThisCategory.setText(isGroupByMajor
+                            ? "🔍  Lọc Sách Theo Khối Ngành Đang Chọn"
+                            : "🔍  Lọc Sách Theo Thể Loại Đang Chọn");
+                    }
 
                 } catch (Exception ex) {
-                    UITheme.showError(CategoryDistributionDialog.this, "Lỗi tải thống kê thể loại:\n" + ex.getMessage());
+                    UITheme.showError(CategoryDistributionDialog.this, "Lỗi tải thống kê:\n" + ex.getMessage());
                 }
             }
         };

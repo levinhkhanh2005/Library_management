@@ -21,7 +21,7 @@ public class CategoryService {
      * @throws IllegalArgumentException nếu tên rỗng hoặc đã tồn tại
      * @throws SQLException nếu lỗi CSDL
      */
-    public Category addCategory(String name, String description) throws SQLException {
+    public Category addCategory(String name, String description, int majorId) throws SQLException {
         validateName(name);
 
         Category existing = categoryDAO.findByName(name.trim());
@@ -30,14 +30,20 @@ public class CategoryService {
         }
 
         Category category = new Category(
-            name.trim(),
-            description == null ? "" : description.trim()
+                name.trim(),
+                description == null ? "" : description.trim()
         );
+        category.setMajorId(majorId);
 
         int id = categoryDAO.insert(category);
         if (id == -1) throw new SQLException("Thêm thể loại thất bại.");
         category.setId(id);
         return category;
+    }
+
+    /** Tương thích code cũ: nếu không chỉ định khối ngành thì để trống. */
+    public Category addCategory(String name, String description) throws SQLException {
+        return addCategory(name, description, 0);
     }
 
     // ===================== Cập nhật thể loại =====================
@@ -85,9 +91,9 @@ public class CategoryService {
         int bookCount = categoryDAO.countBooksUsingCategory(category.getName());
         if (bookCount > 0) {
             throw new IllegalStateException(
-                "Không thể xóa thể loại \"" + category.getName() + "\".\n" +
-                "Hiện có " + bookCount + " cuốn sách đang thuộc thể loại này.\n" +
-                "Vui lòng đổi thể loại của các sách trước khi xóa."
+                    "Không thể xóa thể loại \"" + category.getName() + "\".\n" +
+                            "Hiện có " + bookCount + " cuốn sách đang thuộc thể loại này.\n" +
+                            "Vui lòng đổi thể loại của các sách trước khi xóa."
             );
         }
 

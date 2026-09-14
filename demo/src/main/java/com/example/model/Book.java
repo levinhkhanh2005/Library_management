@@ -15,6 +15,7 @@ public class Book {
     private int totalCopies;
     private int availableCopies;
     private String description;
+    private String major;
 
     // ===================== Constructors =====================
 
@@ -34,6 +35,23 @@ public class Book {
         this.totalCopies = totalCopies;
         this.availableCopies = availableCopies;
         this.description = description;
+        this.major = null;
+    }
+
+    public Book(int id, String isbn, String title, String author,
+                String category, String publisher, int publishYear,
+                int totalCopies, int availableCopies, String description, String major) {
+        this.id = id;
+        this.isbn = isbn;
+        this.title = title;
+        this.author = author;
+        this.category = category;
+        this.publisher = publisher;
+        this.publishYear = publishYear;
+        this.totalCopies = totalCopies;
+        this.availableCopies = availableCopies;
+        this.description = description;
+        this.major = major != null && !major.isBlank() ? major.trim() : null;
     }
 
     /** Constructor tạo mới (không có id). */
@@ -49,6 +67,7 @@ public class Book {
         this.totalCopies = totalCopies;
         this.availableCopies = totalCopies; // ban đầu toàn bộ đều có sẵn
         this.description = description;
+        this.major = null;
     }
 
     // ===================== Getters & Setters =====================
@@ -66,7 +85,20 @@ public class Book {
     public void setAuthor(String author) { this.author = author; }
 
     public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
+    public void setCategory(String category) {
+        this.category = category;
+        if (this.major == null || this.major.isBlank() || "Khác".equals(this.major)) {
+            this.major = null;
+        }
+    }
+
+    public String getMajor() {
+        return major != null && !major.isBlank() ? major : "Chưa phân khối ngành";
+    }
+
+    public void setMajor(String major) {
+        this.major = major;
+    }
 
     public String getPublisher() { return publisher; }
     public void setPublisher(String publisher) { this.publisher = publisher; }

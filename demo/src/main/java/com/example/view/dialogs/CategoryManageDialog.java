@@ -28,7 +28,7 @@ public class CategoryManageDialog extends JDialog {
     private boolean           dataChanged = false;
 
     private static final String[] COLUMNS = {
-        "#", "Tên Thể Loại", "Mô Tả", "Số Sách", "Ngày Tạo"
+            "#", "Tên Thể Loại", "Khối Ngành", "Mô Tả", "Số Sách", "Ngày Tạo"
     };
 
     public CategoryManageDialog(Frame parent) {
@@ -56,7 +56,7 @@ public class CategoryManageDialog extends JDialog {
         header.setBackground(UITheme.BG_PRIMARY);
 
         header.add(UITheme.createPageHeader("📂  Quản Lý Danh Mục Thể Loại",
-            "Quản lý danh mục thể loại chuẩn hóa, tránh nhập tự do không nhất quán"), BorderLayout.NORTH);
+                "Quản lý danh mục thể loại chuẩn hóa, tránh nhập tự do không nhất quán"), BorderLayout.NORTH);
 
         header.add(buildToolbar(), BorderLayout.CENTER);
         return header;
@@ -66,10 +66,10 @@ public class CategoryManageDialog extends JDialog {
         JPanel toolbar = new JPanel(new BorderLayout(UITheme.PAD_MD, 0));
         toolbar.setBackground(UITheme.BG_WHITE);
         toolbar.setBorder(
-            BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UITheme.BORDER_COLOR, 1),
-                new EmptyBorder(UITheme.PAD_SM, UITheme.PAD_MD, UITheme.PAD_SM, UITheme.PAD_MD)
-            )
+                BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(UITheme.BORDER_COLOR, 1),
+                        new EmptyBorder(UITheme.PAD_SM, UITheme.PAD_MD, UITheme.PAD_SM, UITheme.PAD_MD)
+                )
         );
 
         // Nút hành động
@@ -77,6 +77,7 @@ public class CategoryManageDialog extends JDialog {
         btnGroup.setOpaque(false);
 
         JButton btnAdd = UITheme.createPrimaryButton("＋  Thêm Thể Loại");
+        JButton btnMajor = UITheme.createSecondaryButton("🎓  Khối Ngành");
         btnEdit   = UITheme.createSecondaryButton("✎  Sửa");
         btnDelete = UITheme.createDangerButton("✕  Xóa");
         JButton btnRefresh = UITheme.createSecondaryButton("↺  Làm Mới");
@@ -85,6 +86,7 @@ public class CategoryManageDialog extends JDialog {
         btnDelete.setEnabled(false);
 
         btnGroup.add(btnAdd);
+        btnGroup.add(btnMajor);
         btnGroup.add(btnEdit);
         btnGroup.add(btnDelete);
         btnGroup.add(btnRefresh);
@@ -103,6 +105,7 @@ public class CategoryManageDialog extends JDialog {
 
         // Events
         btnAdd.addActionListener(e -> openAddDialog());
+        btnMajor.addActionListener(e -> { MajorManageDialog dlg = new MajorManageDialog((Frame) SwingUtilities.getWindowAncestor(this)); dlg.setVisible(true); loadData(searchField.getText()); });
         btnEdit.addActionListener(e -> openEditDialog());
         btnDelete.addActionListener(e -> deleteSelected());
         btnRefresh.addActionListener(e -> { searchField.setText(""); loadData(null); });
@@ -123,17 +126,17 @@ public class CategoryManageDialog extends JDialog {
         table = new JTable(tableModel);
         UITheme.styleTable(table);
 
-        int[] widths = {45, 180, 260, 80, 140};
+        int[] widths = {45, 160, 190, 230, 80, 140};
         for (int i = 0; i < widths.length; i++) {
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         }
         table.getColumnModel().getColumn(0).setMaxWidth(50);
-        table.getColumnModel().getColumn(3).setMaxWidth(100);
+        table.getColumnModel().getColumn(4).setMaxWidth(100);
 
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
         centerRenderer.setHorizontalAlignment(SwingConstants.CENTER);
         table.getColumnModel().getColumn(0).setCellRenderer(centerRenderer);
-        table.getColumnModel().getColumn(3).setCellRenderer(centerRenderer);
+        table.getColumnModel().getColumn(4).setCellRenderer(centerRenderer);
 
         table.getSelectionModel().addListSelectionListener(e -> {
             boolean selected = table.getSelectedRow() >= 0;
@@ -170,8 +173,8 @@ public class CategoryManageDialog extends JDialog {
         SwingWorker<List<Category>, Void> worker = new SwingWorker<>() {
             @Override protected List<Category> doInBackground() throws Exception {
                 return (keyword == null || keyword.isBlank())
-                    ? categoryService.getAllCategories()
-                    : categoryService.searchCategories(keyword);
+                        ? categoryService.getAllCategories()
+                        : categoryService.searchCategories(keyword);
             }
             @Override protected void done() {
                 try {
@@ -181,11 +184,12 @@ public class CategoryManageDialog extends JDialog {
                     for (Category c : categories) {
                         int bookCount = categoryService.countBooksUsingCategory(c.getName());
                         tableModel.addRow(new Object[]{
-                            idx++,
-                            c.getName(),
-                            c.getDescription() != null ? c.getDescription() : "",
-                            bookCount,
-                            c.getCreatedAt() != null ? c.getCreatedAt() : ""
+                                idx++,
+                                c.getName(),
+                                c.getMajor(),
+                                c.getDescription() != null ? c.getDescription() : "",
+                                bookCount,
+                                c.getCreatedAt() != null ? c.getCreatedAt() : ""
                         });
                     }
                     statusLabel.setText("Tổng: " + categories.size() + " thể loại");
@@ -239,8 +243,8 @@ public class CategoryManageDialog extends JDialog {
         }
 
         boolean confirm = UITheme.showConfirm(this,
-            "Bạn có chắc muốn xóa thể loại:\n\"" + cat.getName() + "\"?",
-            "Xác nhận xóa thể loại");
+                "Bạn có chắc muốn xóa thể loại:\n\"" + cat.getName() + "\"?",
+                "Xác nhận xóa thể loại");
         if (!confirm) return;
 
         try {

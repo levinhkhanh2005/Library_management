@@ -2,6 +2,8 @@ package com.example.view.panels;
 
 import com.example.model.Borrow;
 import com.example.model.CategoryBookStat;
+import com.example.model.ChartPeriodData;
+import com.example.model.ChartPeriodData.TimePeriodMode;
 import com.example.service.BookService;
 import com.example.service.BorrowService;
 import com.example.service.ExportService;
@@ -36,10 +38,14 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
     private JLabel lblTotalBorrows, lblActiveBorrows, lblOverdueBorrows;
 
     // Chart
-    private int[]         monthlyData = new int[12];
-    private int           chartYear   = Year.now().getValue();
-    private JPanel        chartPanel;
-    private PieChartPanel categoryPieChart;
+    private ChartPeriodData periodData = new ChartPeriodData();
+    private TimePeriodMode  periodMode = TimePeriodMode.BY_MONTH;
+    private int             chartYear  = Year.now().getValue();
+    private int             chartMonth = LocalDate.now().getMonthValue();
+    private JComboBox<TimePeriodMode> cbPeriodMode;
+    private JComboBox<String>         cbMonth;
+    private JPanel          chartPanel;
+    private PieChartPanel   categoryPieChart;
     private List<CategoryBookStat> categoryStats = new java.util.ArrayList<>();
 
     // Tables
@@ -308,11 +314,11 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
         content.add(buildStatRow());
         content.add(Box.createVerticalStrut(UITheme.PAD_MD));
 
-        // ---- Hàng 2: Biểu đồ cột mượn theo tháng & Biểu đồ tròn thể loại ----
+        // ---- Hàng 2: Biểu đồ cột mượn/trả theo thời gian & Biểu đồ tròn thể loại ----
         JPanel row2 = new JPanel(new GridLayout(1, 2, UITheme.PAD_MD, 0));
         row2.setBackground(UITheme.BG_PRIMARY);
-        row2.setMaximumSize(new Dimension(Integer.MAX_VALUE, 310));
-        row2.setPreferredSize(new Dimension(0, 310));
+        row2.setMaximumSize(new Dimension(Integer.MAX_VALUE, 320));
+        row2.setPreferredSize(new Dimension(0, 320));
         row2.add(buildChartCard());
         row2.add(buildCategoryPieChartCard());
         content.add(row2);
@@ -414,7 +420,7 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
         return lbl;
     }
 
-    // ---- Biểu đồ cột mượn sách theo tháng ----
+    // ---- Biểu đồ cột mượn & trả theo thời gian ----
     private JPanel buildChartCard() {
         JPanel card = new JPanel(new BorderLayout());
         card.setBackground(UITheme.BG_WHITE);
@@ -425,44 +431,77 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
         cardHeader.setBackground(UITheme.BG_WHITE);
         cardHeader.setBorder(new EmptyBorder(UITheme.PAD_MD, UITheme.PAD_MD, UITheme.PAD_SM, UITheme.PAD_MD));
 
-        JLabel title = new JLabel("📈  Lượt Mượn Theo Tháng — " + chartYear);
+        JLabel title = new JLabel("📈  Lượt Mượn & Trả Sách");
         title.setFont(UITheme.FONT_BOLD);
         title.setForeground(UITheme.TEXT_PRIMARY);
         cardHeader.add(title, BorderLayout.WEST);
 
-        // Nút chọn năm
-        JPanel yearPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        yearPanel.setOpaque(false);
+        // Nút điều khiển bộ lọc thời gian
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        controls.setOpaque(false);
+
+        cbPeriodMode = new JComboBox<>(TimePeriodMode.values());
+        cbPeriodMode.setFont(UITheme.FONT_SMALL);
+        cbPeriodMode.setSelectedItem(periodMode);
+
+        cbMonth = new JComboBox<>(new String[]{
+            "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"
+        });
+        cbMonth.setFont(UITheme.FONT_SMALL);
+        cbMonth.setSelectedIndex(chartMonth - 1);
+        cbMonth.setVisible(periodMode == TimePeriodMode.BY_DAY);
+
         JButton btnPrev = new JButton("◀");
         JButton btnNext = new JButton("▶");
         btnPrev.setFont(UITheme.FONT_SMALL);
         btnNext.setFont(UITheme.FONT_SMALL);
         btnPrev.setFocusPainted(false);
         btnNext.setFocusPainted(false);
-        yearPanel.add(btnPrev);
-        yearPanel.add(btnNext);
-        cardHeader.add(yearPanel, BorderLayout.EAST);
+
+        JLabel lblYear = new JLabel(String.valueOf(chartYear));
+        lblYear.setFont(UITheme.FONT_BOLD);
+        lblYear.setForeground(UITheme.TEXT_PRIMARY);
+
+        controls.add(cbPeriodMode);
+        controls.add(cbMonth);
+        controls.add(btnPrev);
+        controls.add(lblYear);
+        controls.add(btnNext);
+        cardHeader.add(controls, BorderLayout.EAST);
         card.add(cardHeader, BorderLayout.NORTH);
 
         // Vùng vẽ biểu đồ
         chartPanel = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                drawBarChart((Graphics2D) g, monthlyData);
+                drawDualBarChart((Graphics2D) g, periodData);
             }
         };
         chartPanel.setBackground(UITheme.BG_WHITE);
         card.add(chartPanel, BorderLayout.CENTER);
 
+        cbPeriodMode.addActionListener(e -> {
+            periodMode = (TimePeriodMode) cbPeriodMode.getSelectedItem();
+            cbMonth.setVisible(periodMode == TimePeriodMode.BY_DAY);
+            cardHeader.revalidate();
+            cardHeader.repaint();
+            loadChartData();
+        });
+
+        cbMonth.addActionListener(e -> {
+            chartMonth = cbMonth.getSelectedIndex() + 1;
+            loadChartData();
+        });
+
         btnPrev.addActionListener(e -> {
             chartYear--;
-            title.setText("📈  Lượt Mượn Theo Tháng — " + chartYear);
+            lblYear.setText(String.valueOf(chartYear));
             loadChartData();
         });
         btnNext.addActionListener(e -> {
             if (chartYear < Year.now().getValue()) {
                 chartYear++;
-                title.setText("📈  Lượt Mượn Theo Tháng — " + chartYear);
+                lblYear.setText(String.valueOf(chartYear));
                 loadChartData();
             }
         });
@@ -470,29 +509,42 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
         return card;
     }
 
-    /** Vẽ biểu đồ cột với Graphics2D. */
-    private void drawBarChart(Graphics2D g2, int[] data) {
+    /** Vẽ biểu đồ cột kép (Lượt mượn & Trả) với Graphics2D. */
+    private void drawDualBarChart(Graphics2D g2, ChartPeriodData data) {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         int w = chartPanel.getWidth();
         int h = chartPanel.getHeight();
-        int padL = 45, padR = 16, padT = 20, padB = 36;
+        int padL = 45, padR = 16, padT = 32, padB = 36;
 
         if (w <= 0 || h <= 0) return;
 
+        // Legend
+        g2.setFont(UITheme.FONT_SMALL);
+        int legX = w - padR - 150;
+        int legY = 16;
+        g2.setColor(UITheme.ACCENT_PRIMARY);
+        g2.fillRect(legX, legY - 10, 10, 10);
+        g2.setColor(UITheme.TEXT_PRIMARY);
+        g2.drawString("Lượt mượn", legX + 14, legY);
+
+        g2.setColor(UITheme.COLOR_SUCCESS);
+        g2.fillRect(legX + 80, legY - 10, 10, 10);
+        g2.setColor(UITheme.TEXT_PRIMARY);
+        g2.drawString("Lượt trả", legX + 94, legY);
+
         int chartW = w - padL - padR;
         int chartH = h - padT - padB;
-        int max    = 1;
-        for (int v : data) if (v > max) max = v;
+        int count  = data.size();
+        if (count == 0) return;
 
-        int barW  = chartW / 12;
-        int gap   = (int)(barW * 0.2);
-        int barBW = barW - gap * 2;
-
-        String[] months = {"T1","T2","T3","T4","T5","T6","T7","T8","T9","T10","T11","T12"};
+        int max = data.getMaxVal();
+        String[] labels  = data.getLabels();
+        int[] borrows   = data.getBorrowCounts();
+        int[] returns   = data.getReturnCounts();
 
         // Đường kẻ ngang
         g2.setStroke(new BasicStroke(1f));
-        int gridLines = 5;
+        int gridLines = 4;
         for (int i = 0; i <= gridLines; i++) {
             int y = padT + (int)((double)i / gridLines * chartH);
             g2.setColor(UITheme.BORDER_COLOR);
@@ -500,38 +552,62 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
             g2.setColor(UITheme.TEXT_MUTED);
             g2.setFont(UITheme.FONT_SMALL);
             int val = max - (int)((double)i / gridLines * max);
-            g2.drawString(String.valueOf(val), 2, y + 4);
+            g2.drawString(String.valueOf(val), 4, y + 4);
         }
 
-        // Vẽ cột
-        for (int i = 0; i < 12; i++) {
-            int x    = padL + i * barW + gap;
-            int barH = data[i] == 0 ? 0 : (int)((double)data[i] / max * chartH);
-            int y    = padT + chartH - barH;
+        double groupW = (double) chartW / count;
+        int barW = Math.max(2, (int)(groupW * 0.38));
 
-            // Cột gradient
-            if (barH > 0) {
+        for (int i = 0; i < count; i++) {
+            double groupX = padL + i * groupW;
+            int bVal = (borrows != null && i < borrows.length) ? borrows[i] : 0;
+            int rVal = (returns != null && i < returns.length) ? returns[i] : 0;
+
+            int bHeight = bVal == 0 ? 0 : (int)((double)bVal / max * chartH);
+            int rHeight = rVal == 0 ? 0 : (int)((double)rVal / max * chartH);
+
+            int bX = (int)(groupX + (groupW - barW * 2 - 1) / 2);
+            int rX = bX + barW + 1;
+
+            int bY = padT + chartH - bHeight;
+            int rY = padT + chartH - rHeight;
+
+            // Cột mượn
+            if (bHeight > 0) {
                 GradientPaint gp = new GradientPaint(
-                    x, y, UITheme.ACCENT_PRIMARY,
-                    x, padT + chartH, UITheme.ACCENT_LIGHT);
+                    bX, bY, UITheme.ACCENT_PRIMARY,
+                    bX, padT + chartH, UITheme.ACCENT_LIGHT);
                 g2.setPaint(gp);
-                g2.fillRoundRect(x, y, barBW, barH, 4, 4);
-            }
+                g2.fillRoundRect(bX, bY, barW, bHeight, 3, 3);
 
-            // Giá trị trên đỉnh cột
-            if (data[i] > 0) {
                 g2.setColor(UITheme.ACCENT_PRIMARY);
-                g2.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 10));
-                String val = String.valueOf(data[i]);
-                int tx = x + (barBW - g2.getFontMetrics().stringWidth(val)) / 2;
-                g2.drawString(val, tx, y - 3);
+                g2.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, count > 20 ? 8 : 10));
+                String valStr = String.valueOf(bVal);
+                int tx = bX + (barW - g2.getFontMetrics().stringWidth(valStr)) / 2;
+                g2.drawString(valStr, tx, bY - 2);
             }
 
-            // Nhãn tháng
+            // Cột trả
+            if (rHeight > 0) {
+                GradientPaint gp = new GradientPaint(
+                    rX, rY, UITheme.COLOR_SUCCESS,
+                    rX, padT + chartH, new Color(0xD1FAE5));
+                g2.setPaint(gp);
+                g2.fillRoundRect(rX, rY, barW, rHeight, 3, 3);
+
+                g2.setColor(UITheme.COLOR_SUCCESS);
+                g2.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, count > 20 ? 8 : 10));
+                String valStr = String.valueOf(rVal);
+                int tx = rX + (barW - g2.getFontMetrics().stringWidth(valStr)) / 2;
+                g2.drawString(valStr, tx, rY - 2);
+            }
+
+            // Nhãn X - Hiển thị từng ngày đầy đủ
             g2.setColor(UITheme.TEXT_SECONDARY);
-            g2.setFont(UITheme.FONT_SMALL);
-            int tx = padL + i * barW + (barW - g2.getFontMetrics().stringWidth(months[i])) / 2;
-            g2.drawString(months[i], tx, padT + chartH + 20);
+            g2.setFont(new Font(UITheme.FONT_NAME, Font.PLAIN, count > 20 ? 9 : 11));
+            String lbl = labels[i];
+            int tx = (int)(groupX + (groupW - g2.getFontMetrics().stringWidth(lbl)) / 2);
+            g2.drawString(lbl, tx, padT + chartH + 18);
         }
     }
 
@@ -632,7 +708,7 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
         return card;
     }
 
-    // ---- Biểu đồ tròn phân bố thể loại sách ----
+    // ---- Biểu đồ tròn phân bố thể loại / ngành sách ----
     private JPanel buildCategoryPieChartCard() {
         JPanel card = new JPanel(new BorderLayout());
         card.setBackground(UITheme.BG_WHITE);
@@ -642,10 +718,20 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
         cardHeader.setBackground(UITheme.BG_WHITE);
         cardHeader.setBorder(new EmptyBorder(UITheme.PAD_MD, UITheme.PAD_MD, UITheme.PAD_SM, UITheme.PAD_MD));
 
-        JLabel title = new JLabel("🍩  Phân Bố Thể Loại Sách (%)");
+        JLabel title = new JLabel("🍩  Phân Bố Sách (%)");
         title.setFont(UITheme.FONT_BOLD);
         title.setForeground(UITheme.TEXT_PRIMARY);
         cardHeader.add(title, BorderLayout.WEST);
+
+        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        rightControls.setOpaque(false);
+
+        JComboBox<String> cbGroup = new JComboBox<>(new String[]{"Theo Thể Loại", "Theo Ngành"});
+        cbGroup.setFont(UITheme.FONT_SMALL);
+        cbGroup.addActionListener(e -> {
+            boolean byMajor = cbGroup.getSelectedIndex() == 1;
+            loadPieData(byMajor);
+        });
 
         JButton btnDetail = new JButton("Chi Tiết ↗");
         btnDetail.setFont(UITheme.FONT_SMALL);
@@ -656,13 +742,44 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
                 new com.example.view.dialogs.CategoryDistributionDialog((Frame) SwingUtilities.getWindowAncestor(this), null);
             dlg.setVisible(true);
         });
-        cardHeader.add(btnDetail, BorderLayout.EAST);
+
+        rightControls.add(cbGroup);
+        rightControls.add(btnDetail);
+        cardHeader.add(rightControls, BorderLayout.EAST);
         card.add(cardHeader, BorderLayout.NORTH);
 
         categoryPieChart = new PieChartPanel();
         card.add(categoryPieChart, BorderLayout.CENTER);
 
         return card;
+    }
+
+    private void loadPieData(boolean byMajor) {
+        SwingWorker<List<CategoryBookStat>, Void> worker = new SwingWorker<>() {
+            @Override protected List<CategoryBookStat> doInBackground() throws Exception {
+                if (byMajor) {
+                    List<com.example.model.MajorBookStat> majors = bookService.getMajorDistribution(true);
+                    List<CategoryBookStat> converted = new java.util.ArrayList<>();
+                    for (com.example.model.MajorBookStat ms : majors) {
+                        CategoryBookStat cs = new CategoryBookStat(
+                            ms.getMajorName(), ms.getTitleCount(), ms.getTotalCopies(), ms.getAvailableCopies()
+                        );
+                        cs.setPercentage(ms.getPercentage());
+                        converted.add(cs);
+                    }
+                    return converted;
+                } else {
+                    return bookService.getCategoryDistribution(true);
+                }
+            }
+            @Override protected void done() {
+                try {
+                    categoryStats = get();
+                    if (categoryPieChart != null) categoryPieChart.setData(categoryStats, true);
+                } catch (Exception ignored) {}
+            }
+        };
+        worker.execute();
     }
 
     // ================================================================
@@ -686,7 +803,7 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
                 totalBorrows  = borrowService.getAllBorrows().size();
                 topBooks      = borrowService.getTopBorrowedBooks(10);
                 overdue       = borrowService.getOverdueBorrows();
-                monthlyData   = borrowService.getBorrowCountByMonth(chartYear);
+                periodData    = borrowService.getBorrowAndReturnStats(periodMode, chartYear, chartMonth);
                 categoryStats = bookService.getCategoryDistribution(true);
                 return null;
             }
@@ -742,12 +859,12 @@ public class ReportPanel extends JPanel implements MainFrame.Refreshable {
     }
 
     private void loadChartData() {
-        SwingWorker<int[], Void> w = new SwingWorker<>() {
-            @Override protected int[] doInBackground() throws Exception {
-                return borrowService.getBorrowCountByMonth(chartYear);
+        SwingWorker<ChartPeriodData, Void> w = new SwingWorker<>() {
+            @Override protected ChartPeriodData doInBackground() throws Exception {
+                return borrowService.getBorrowAndReturnStats(periodMode, chartYear, chartMonth);
             }
             @Override protected void done() {
-                try { monthlyData = get(); if (chartPanel != null) chartPanel.repaint(); }
+                try { periodData = get(); if (chartPanel != null) chartPanel.repaint(); }
                 catch (Exception ignored) {}
             }
         };
