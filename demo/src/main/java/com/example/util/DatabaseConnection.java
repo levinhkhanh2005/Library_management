@@ -102,10 +102,11 @@ public class DatabaseConnection {
                 // Autocommit phải = true trước khi chạy bất kỳ PRAGMA nào
                 connection.setAutoCommit(true);
 
-                // Bật foreign key constraints (quan trọng nhất)
+                // Bật foreign key constraints (quan trọng nhất) & WAL mode hỗ trợ nhiều tiến trình chạy song song
                 try (var st = connection.createStatement()) {
+                    st.execute("PRAGMA journal_mode = WAL");
                     st.execute("PRAGMA foreign_keys = ON");
-                    st.execute("PRAGMA busy_timeout = 3000");
+                    st.execute("PRAGMA busy_timeout = 5000");
                     st.execute("PRAGMA synchronous = NORMAL");
                 }
 

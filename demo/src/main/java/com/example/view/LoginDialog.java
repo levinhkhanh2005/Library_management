@@ -29,7 +29,7 @@ public class LoginDialog extends JDialog {
     private JLabel         errorLabel;
 
     public LoginDialog(Frame parent) {
-        super(parent, "Đăng Nhập — Thư Viện Nguyễn Huệ", true);
+        super(parent, "Đăng Nhập Quản Trị — Thư Viện Nguyễn Huệ", true);
         initUI();
         pack();
         setResizable(false);
@@ -177,7 +177,7 @@ public class LoginDialog extends JDialog {
         banner.add(sepLine, gbc);
 
         // Tagline
-        JLabel tagLabel = new JLabel("<html><center>Hệ thống quản lý<br>thư viện thông minh</center></html>");
+        JLabel tagLabel = new JLabel("<html><center>Cổng Quản Trị Hệ Thống<br>Quản trị viên & Thủ thư</center></html>");
         tagLabel.setFont(new Font(UITheme.FONT_NAME, Font.PLAIN, 12));
         tagLabel.setForeground(new Color(0xA5B4FC));
         tagLabel.setHorizontalAlignment(SwingConstants.CENTER);
@@ -217,7 +217,7 @@ public class LoginDialog extends JDialog {
         form.add(heading, gbc);
 
         gbc.gridy++; gbc.insets = new Insets(0, 0, 28, 0);
-        JLabel sub = new JLabel("Vui lòng đăng nhập để tiếp tục");
+        JLabel sub = new JLabel("Đăng nhập tài khoản Quản trị / Thủ thư");
         sub.setFont(UITheme.FONT_BODY);
         sub.setForeground(UITheme.TEXT_MUTED);
         form.add(sub, gbc);
@@ -311,7 +311,7 @@ public class LoginDialog extends JDialog {
         JLabel hint = new JLabel("Mặc định: ");
         hint.setFont(UITheme.FONT_SMALL);
         hint.setForeground(UITheme.TEXT_MUTED);
-        JLabel hintCreds = new JLabel("admin / admin123");
+        JLabel hintCreds = new JLabel("admin/admin123  hoặc  thuthu/thuthu123");
         hintCreds.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 11));
         hintCreds.setForeground(UITheme.ACCENT_PRIMARY);
         hintPanel.add(hint);
@@ -322,19 +322,15 @@ public class LoginDialog extends JDialog {
         gbc.gridy++; gbc.insets = new Insets(12, 0, 0, 0);
         JPanel registerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
         registerPanel.setOpaque(false);
-        JLabel regLabel = new JLabel("Chưa có tài khoản?");
+        JLabel regLabel = new JLabel("Bạn là độc giả?");
         regLabel.setFont(UITheme.FONT_SMALL);
         regLabel.setForeground(UITheme.TEXT_MUTED);
         registerPanel.add(regLabel);
 
-        JButton btnRegister = new JButton("Đăng ký ngay");
-        btnRegister.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 11));
-        btnRegister.setForeground(UITheme.ACCENT_PRIMARY);
-        btnRegister.setBorderPainted(false);
-        btnRegister.setContentAreaFilled(false);
-        btnRegister.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btnRegister.addActionListener(e -> openRegisterDialog());
-        registerPanel.add(btnRegister);
+        JLabel regHint = new JLabel("Sử dụng ứng dụng Cổng Độc Giả (ReaderApp)");
+        regHint.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 11));
+        regHint.setForeground(UITheme.ACCENT_PRIMARY);
+        registerPanel.add(regHint);
         form.add(registerPanel, gbc);
 
         // --- Sự kiện ---
@@ -373,10 +369,16 @@ public class LoginDialog extends JDialog {
         loginButton.setText("⏳  Đang đăng nhập...");
         errorLabel.setText(" ");
 
-        // Chạy trên background thread để không block UI
         SwingWorker<User, Void> worker = new SwingWorker<>() {
             @Override protected User doInBackground() throws Exception {
-                return authService.login(username, password);
+                User user = authService.login(username, password);
+                if (user.isReader()) {
+                    authService.logout();
+                    throw new IllegalArgumentException(
+                        "Tài khoản này là tài khoản Độc giả.\nVui lòng sử dụng ứng dụng \"Cổng Độc Giả\" (ReaderApp)!"
+                    );
+                }
+                return user;
             }
 
             @Override protected void done() {

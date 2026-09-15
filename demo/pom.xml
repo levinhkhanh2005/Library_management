@@ -147,6 +147,36 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.1.2</version>
       </plugin>
+
+      <!-- Exec Maven Plugin: hỗ trợ chạy AdminApp hoặc ReaderApp -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.1</version>
+        <executions>
+          <execution>
+            <id>admin</id>
+            <goals>
+              <goal>java</goal>
+            </goals>
+            <configuration>
+              <mainClass>com.example.AdminApp</mainClass>
+            </configuration>
+          </execution>
+          <execution>
+            <id>reader</id>
+            <goals>
+              <goal>java</goal>
+            </goals>
+            <configuration>
+              <mainClass>com.example.ReaderApp</mainClass>
+            </configuration>
+          </execution>
+        </executions>
+        <configuration>
+          <mainClass>com.example.AdminApp</mainClass>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 </project>
