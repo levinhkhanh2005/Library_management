@@ -34,9 +34,9 @@ public class BookDAO {
             ps.setString(3, book.getAuthor());
             ps.setString(4, book.getCategory());
             ps.setString(5, book.getPublisher());
-            ps.setInt   (6, book.getPublishYear());
-            ps.setInt   (7, book.getTotalCopies());
-            ps.setInt   (8, book.getAvailableCopies());
+            ps.setInt(6, book.getPublishYear());
+            ps.setInt(7, book.getTotalCopies());
+            ps.setInt(8, book.getAvailableCopies());
             ps.setString(9, book.getDescription());
             ps.executeUpdate();
 
@@ -62,11 +62,11 @@ public class BookDAO {
             ps.setString(3, book.getAuthor());
             ps.setString(4, book.getCategory());
             ps.setString(5, book.getPublisher());
-            ps.setInt   (6, book.getPublishYear());
-            ps.setInt   (7, book.getTotalCopies());
-            ps.setInt   (8, book.getAvailableCopies());
+            ps.setInt(6, book.getPublishYear());
+            ps.setInt(7, book.getTotalCopies());
+            ps.setInt(8, book.getAvailableCopies());
             ps.setString(9, book.getDescription());
-            ps.setInt   (10, book.getId());
+            ps.setInt(10, book.getId());
             return ps.executeUpdate() > 0;
         }
     }
@@ -114,8 +114,8 @@ public class BookDAO {
      */
     public boolean discardCopies(int bookId, int count) throws SQLException {
         String sql = """
-                UPDATE books 
-                SET total_copies = total_copies - ?, available_copies = available_copies - ? 
+                UPDATE books
+                SET total_copies = total_copies - ?, available_copies = available_copies - ?
                 WHERE id = ? AND available_copies >= ? AND total_copies >= ?
                 """;
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
@@ -131,7 +131,8 @@ public class BookDAO {
     // ===================== Xóa sách =====================
 
     /**
-     * Xóa sách theo id. Chú ý: chỉ xóa được nếu không còn phiếu mượn đang hoạt động.
+     * Xóa sách theo id. Chú ý: chỉ xóa được nếu không còn phiếu mượn đang hoạt
+     * động.
      */
     public boolean delete(int id) throws SQLException {
         String sql = "DELETE FROM books WHERE id = ?";
@@ -147,7 +148,7 @@ public class BookDAO {
     public List<Book> findAll() throws SQLException {
         String sql = "SELECT * FROM books ORDER BY title";
         try (Statement stmt = getConn().createStatement();
-             ResultSet rs   = stmt.executeQuery(sql)) {
+             ResultSet rs = stmt.executeQuery(sql)) {
             return mapList(rs);
         }
     }
@@ -189,7 +190,8 @@ public class BookDAO {
                 """;
         String like = "%" + keyword.trim() + "%";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
-            for (int i = 1; i <= 5; i++) ps.setString(i, like);
+            for (int i = 1; i <= 5; i++)
+                ps.setString(i, like);
             return mapList(ps.executeQuery());
         }
     }
@@ -197,7 +199,8 @@ public class BookDAO {
     /**
      * Tìm kiếm nâng cao kết hợp nhiều tiêu chí.
      */
-    public List<Book> advancedSearch(String keyword, String category, String author, Integer publishYear, Boolean isAvailable) throws SQLException {
+    public List<Book> advancedSearch(String keyword, String category, String author, Integer publishYear,
+                                     Boolean isAvailable) throws SQLException {
         StringBuilder sql = new StringBuilder("SELECT * FROM books WHERE 1=1 ");
         List<Object> params = new ArrayList<>();
 
@@ -238,7 +241,8 @@ public class BookDAO {
         }
     }
 
-    public List<Book> advancedSearch(String keyword, String category, Integer publishYear, Boolean isAvailable) throws SQLException {
+    public List<Book> advancedSearch(String keyword, String category, Integer publishYear, Boolean isAvailable)
+            throws SQLException {
         return advancedSearch(keyword, category, null, publishYear, isAvailable);
     }
 
@@ -258,8 +262,9 @@ public class BookDAO {
         String sql = "SELECT DISTINCT category FROM books WHERE category IS NOT NULL ORDER BY category";
         List<String> list = new ArrayList<>();
         try (Statement stmt = getConn().createStatement();
-             ResultSet rs   = stmt.executeQuery(sql)) {
-            while (rs.next()) list.add(rs.getString("category"));
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next())
+                list.add(rs.getString("category"));
         }
         return list;
     }
@@ -268,7 +273,7 @@ public class BookDAO {
     public int countAll() throws SQLException {
         String sql = "SELECT COUNT(*) FROM books";
         try (Statement stmt = getConn().createStatement();
-             ResultSet rs   = stmt.executeQuery(sql)) {
+             ResultSet rs = stmt.executeQuery(sql)) {
             return rs.next() ? rs.getInt(1) : 0;
         }
     }
@@ -277,18 +282,19 @@ public class BookDAO {
     public int countBorrowed() throws SQLException {
         String sql = "SELECT SUM(total_copies - available_copies) FROM books";
         try (Statement stmt = getConn().createStatement();
-             ResultSet rs   = stmt.executeQuery(sql)) {
+             ResultSet rs = stmt.executeQuery(sql)) {
             return rs.next() ? rs.getInt(1) : 0;
         }
     }
 
     /**
      * Thống kê số lượng sách theo thể loại.
-     * Trả về danh sách CategoryBookStat gồm tên thể loại, số đầu sách, tổng số bản sao, số bản có sẵn.
+     * Trả về danh sách CategoryBookStat gồm tên thể loại, số đầu sách, tổng số bản
+     * sao, số bản có sẵn.
      */
     public List<CategoryBookStat> getCategoryStats() throws SQLException {
         String sql = """
-                SELECT 
+                SELECT
                     COALESCE(NULLIF(TRIM(category), ''), 'Chưa phân loại') AS cat_name,
                     COUNT(*) AS title_count,
                     SUM(total_copies) AS sum_total_copies,
@@ -299,22 +305,55 @@ public class BookDAO {
                 """;
         List<CategoryBookStat> list = new ArrayList<>();
         try (Statement stmt = getConn().createStatement();
-             ResultSet rs   = stmt.executeQuery(sql)) {
+             ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 list.add(new CategoryBookStat(
-                    rs.getString("cat_name"),
-                    rs.getInt("title_count"),
-                    rs.getInt("sum_total_copies"),
-                    rs.getInt("sum_available_copies")
-                ));
+                        rs.getString("cat_name"),
+                        rs.getInt("title_count"),
+                        rs.getInt("sum_total_copies"),
+                        rs.getInt("sum_available_copies")));
             }
         }
         return list;
     }
 
     /**
-     * Lấy danh sách các phiếu mượn đang hoạt động của cuốn sách này kèm thông tin bạn đọc.
-     * Mỗi phần tử Object[] gồm: [borrowId, readerCode, readerName, readerPhone, borrowDate, dueDate, status]
+     * Thống kê số lượng sách phân bổ theo Ngành (Khối Ngành / Lĩnh Vực).
+     */
+    public List<com.example.model.MajorBookStat> getMajorStats() throws SQLException {
+        String sql = """
+                SELECT
+                    COALESCE(NULLIF(TRIM(m.name), ''), 'Chưa phân khối ngành') AS major_name,
+                    COUNT(DISTINCT b.id) AS title_count,
+                    COALESCE(SUM(b.total_copies), 0) AS sum_total_copies,
+                    COALESCE(SUM(b.available_copies), 0) AS sum_available_copies,
+                    COUNT(DISTINCT c.id) AS category_count
+                FROM books b
+                LEFT JOIN categories c ON LOWER(TRIM(b.category)) = LOWER(TRIM(c.name))
+                LEFT JOIN majors m ON c.major_id = m.id
+                GROUP BY major_name
+                ORDER BY title_count DESC, sum_total_copies DESC
+                """;
+        List<com.example.model.MajorBookStat> list = new ArrayList<>();
+        try (Statement stmt = getConn().createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(new com.example.model.MajorBookStat(
+                        rs.getString("major_name"),
+                        rs.getInt("title_count"),
+                        rs.getInt("sum_total_copies"),
+                        rs.getInt("sum_available_copies"),
+                        rs.getInt("category_count")));
+            }
+        }
+        return list;
+    }
+
+    /**
+     * Lấy danh sách các phiếu mượn đang hoạt động của cuốn sách này kèm thông tin
+     * bạn đọc.
+     * Mỗi phần tử Object[] gồm: [borrowId, readerCode, readerName, readerPhone,
+     * borrowDate, dueDate, status]
      */
     public List<Object[]> getActiveBorrowersForBook(int bookId) throws SQLException {
         String sql = """
@@ -329,14 +368,14 @@ public class BookDAO {
             ps.setInt(1, bookId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    list.add(new Object[]{
-                        rs.getInt("id"),
-                        rs.getString("reader_code"),
-                        rs.getString("full_name"),
-                        rs.getString("phone"),
-                        rs.getString("borrow_date"),
-                        rs.getString("due_date"),
-                        rs.getString("status")
+                    list.add(new Object[] {
+                            rs.getInt("id"),
+                            rs.getString("reader_code"),
+                            rs.getString("full_name"),
+                            rs.getString("phone"),
+                            rs.getString("borrow_date"),
+                            rs.getString("due_date"),
+                            rs.getString("status")
                     });
                 }
             }
@@ -344,26 +383,76 @@ public class BookDAO {
         return list;
     }
 
+    /**
+     * Top nhà xuất bản có nhiều đầu sách nhất.
+     *
+     * @return List<Object[]>: [publisherName, titleCount, totalCopies,
+     *         availableCopies]
+     */
+    public List<Object[]> getTopPublishers(int limit) throws SQLException {
+        String sql = """
+                SELECT COALESCE(NULLIF(TRIM(publisher), ''), 'Chưa rõ NXB') AS pub_name,
+                       COUNT(*) AS title_count,
+                       SUM(total_copies) AS total_copies,
+                       SUM(available_copies) AS available_copies
+                FROM books
+                GROUP BY pub_name
+                ORDER BY title_count DESC, total_copies DESC
+                LIMIT ?
+                """;
+        List<Object[]> list = new ArrayList<>();
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Object[] {
+                            rs.getString("pub_name"),
+                            rs.getInt("title_count"),
+                            rs.getInt("total_copies"),
+                            rs.getInt("available_copies")
+                    });
+                }
+            }
+        }
+        return list;
+    }
+
+    /** Lấy sách thuộc tất cả thể loại của một khối ngành. */
+    public List<Book> getBooksByMajor(String majorName) throws SQLException {
+        if (majorName == null || majorName.isBlank()) return findAll();
+        String sql = """
+                SELECT b.* FROM books b
+                JOIN categories c ON LOWER(TRIM(b.category)) = LOWER(TRIM(c.name))
+                JOIN majors m ON c.major_id = m.id
+                WHERE LOWER(TRIM(m.name)) = LOWER(TRIM(?))
+                ORDER BY b.title
+                """;
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, majorName);
+            try (ResultSet rs = ps.executeQuery()) { return mapList(rs); }
+        }
+    }
+
     // ===================== Mapping =====================
 
     private List<Book> mapList(ResultSet rs) throws SQLException {
         List<Book> list = new ArrayList<>();
-        while (rs.next()) list.add(mapRow(rs));
+        while (rs.next())
+            list.add(mapRow(rs));
         return list;
     }
 
     private Book mapRow(ResultSet rs) throws SQLException {
         return new Book(
-            rs.getInt   ("id"),
-            rs.getString("isbn"),
-            rs.getString("title"),
-            rs.getString("author"),
-            rs.getString("category"),
-            rs.getString("publisher"),
-            rs.getInt   ("publish_year"),
-            rs.getInt   ("total_copies"),
-            rs.getInt   ("available_copies"),
-            rs.getString("description")
-        );
+                rs.getInt("id"),
+                rs.getString("isbn"),
+                rs.getString("title"),
+                rs.getString("author"),
+                rs.getString("category"),
+                rs.getString("publisher"),
+                rs.getInt("publish_year"),
+                rs.getInt("total_copies"),
+                rs.getInt("available_copies"),
+                rs.getString("description"));
     }
 }

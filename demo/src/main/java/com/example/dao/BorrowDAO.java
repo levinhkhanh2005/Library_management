@@ -532,6 +532,195 @@ public class BorrowDAO {
     }
 
     /**
+     * Thống kê số lượt mượn và trả theo khoảng thời gian (ngày, tháng, quý, năm).
+     */
+    public com.example.model.ChartPeriodData getBorrowAndReturnStats(
+            com.example.model.ChartPeriodData.TimePeriodMode mode, int year, int month) throws SQLException {
+        if (mode == null) mode = com.example.model.ChartPeriodData.TimePeriodMode.BY_MONTH;
+
+        String[] labels;
+        int[] borrowCounts;
+        int[] returnCounts;
+
+        switch (mode) {
+            case BY_DAY -> {
+                int safeMonth = (month >= 1 && month <= 12) ? month : java.time.LocalDate.now().getMonthValue();
+                int daysInMonth = java.time.YearMonth.of(year, safeMonth).lengthOfMonth();
+                labels = new String[daysInMonth];
+                borrowCounts = new int[daysInMonth];
+                returnCounts = new int[daysInMonth];
+                for (int i = 0; i < daysInMonth; i++) {
+                    labels[i] = String.valueOf(i + 1);
+                }
+
+                String monthStr = String.format("%02d", safeMonth);
+                String yearStr = String.valueOf(year);
+
+                String sqlBorrow = """
+                        SELECT CAST(SUBSTR(borrow_date, 1, 2) AS INTEGER) AS d, COUNT(*) AS cnt
+                        FROM borrows
+                        WHERE SUBSTR(borrow_date, 4, 2) = ? AND SUBSTR(borrow_date, 7, 4) = ?
+                        GROUP BY d
+                        """;
+                try (PreparedStatement ps = getConn().prepareStatement(sqlBorrow)) {
+                    ps.setString(1, monthStr);
+                    ps.setString(2, yearStr);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int d = rs.getInt("d");
+                            if (d >= 1 && d <= daysInMonth) borrowCounts[d - 1] = rs.getInt("cnt");
+                        }
+                    }
+                }
+
+                String sqlReturn = """
+                        SELECT CAST(SUBSTR(return_date, 1, 2) AS INTEGER) AS d, COUNT(*) AS cnt
+                        FROM borrows
+                        WHERE return_date IS NOT NULL AND status = 'RETURNED'
+                          AND SUBSTR(return_date, 4, 2) = ? AND SUBSTR(return_date, 7, 4) = ?
+                        GROUP BY d
+                        """;
+                try (PreparedStatement ps = getConn().prepareStatement(sqlReturn)) {
+                    ps.setString(1, monthStr);
+                    ps.setString(2, yearStr);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int d = rs.getInt("d");
+                            if (d >= 1 && d <= daysInMonth) returnCounts[d - 1] = rs.getInt("cnt");
+                        }
+                    }
+                }
+            }
+            case BY_QUARTER -> {
+                labels = new String[]{"Quý 1", "Quý 2", "Quý 3", "Quý 4"};
+                borrowCounts = new int[4];
+                returnCounts = new int[4];
+                String yearStr = String.valueOf(year);
+
+                String sqlBorrow = """
+                        SELECT (CAST(SUBSTR(borrow_date, 4, 2) AS INTEGER) - 1) / 3 + 1 AS q, COUNT(*) AS cnt
+                        FROM borrows
+                        WHERE SUBSTR(borrow_date, 7, 4) = ?
+                        GROUP BY q
+                        """;
+                try (PreparedStatement ps = getConn().prepareStatement(sqlBorrow)) {
+                    ps.setString(1, yearStr);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int q = rs.getInt("q");
+                            if (q >= 1 && q <= 4) borrowCounts[q - 1] = rs.getInt("cnt");
+                        }
+                    }
+                }
+
+                String sqlReturn = """
+                        SELECT (CAST(SUBSTR(return_date, 4, 2) AS INTEGER) - 1) / 3 + 1 AS q, COUNT(*) AS cnt
+                        FROM borrows
+                        WHERE return_date IS NOT NULL AND status = 'RETURNED'
+                          AND SUBSTR(return_date, 7, 4) = ?
+                        GROUP BY q
+                        """;
+                try (PreparedStatement ps = getConn().prepareStatement(sqlReturn)) {
+                    ps.setString(1, yearStr);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int q = rs.getInt("q");
+                            if (q >= 1 && q <= 4) returnCounts[q - 1] = rs.getInt("cnt");
+                        }
+                    }
+                }
+            }
+            case BY_YEAR -> {
+                labels = new String[5];
+                borrowCounts = new int[5];
+                returnCounts = new int[5];
+                int startYear = year - 4;
+                for (int i = 0; i < 5; i++) {
+                    labels[i] = String.valueOf(startYear + i);
+                }
+
+                String sqlBorrow = """
+                        SELECT CAST(SUBSTR(borrow_date, 7, 4) AS INTEGER) AS y, COUNT(*) AS cnt
+                        FROM borrows
+                        WHERE CAST(SUBSTR(borrow_date, 7, 4) AS INTEGER) BETWEEN ? AND ?
+                        GROUP BY y
+                        """;
+                try (PreparedStatement ps = getConn().prepareStatement(sqlBorrow)) {
+                    ps.setInt(1, startYear);
+                    ps.setInt(2, year);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int y = rs.getInt("y");
+                            int idx = y - startYear;
+                            if (idx >= 0 && idx < 5) borrowCounts[idx] = rs.getInt("cnt");
+                        }
+                    }
+                }
+
+                String sqlReturn = """
+                        SELECT CAST(SUBSTR(return_date, 7, 4) AS INTEGER) AS y, COUNT(*) AS cnt
+                        FROM borrows
+                        WHERE return_date IS NOT NULL AND status = 'RETURNED'
+                          AND CAST(SUBSTR(return_date, 7, 4) AS INTEGER) BETWEEN ? AND ?
+                        GROUP BY y
+                        """;
+                try (PreparedStatement ps = getConn().prepareStatement(sqlReturn)) {
+                    ps.setInt(1, startYear);
+                    ps.setInt(2, year);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int y = rs.getInt("y");
+                            int idx = y - startYear;
+                            if (idx >= 0 && idx < 5) returnCounts[idx] = rs.getInt("cnt");
+                        }
+                    }
+                }
+            }
+            default -> { // BY_MONTH
+                labels = new String[]{"T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"};
+                borrowCounts = new int[12];
+                returnCounts = new int[12];
+                String yearStr = String.valueOf(year);
+
+                String sqlBorrow = """
+                        SELECT CAST(SUBSTR(borrow_date, 4, 2) AS INTEGER) AS m, COUNT(*) AS cnt
+                        FROM borrows
+                        WHERE SUBSTR(borrow_date, 7, 4) = ?
+                        GROUP BY m
+                        """;
+                try (PreparedStatement ps = getConn().prepareStatement(sqlBorrow)) {
+                    ps.setString(1, yearStr);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int m = rs.getInt("m");
+                            if (m >= 1 && m <= 12) borrowCounts[m - 1] = rs.getInt("cnt");
+                        }
+                    }
+                }
+
+                String sqlReturn = """
+                        SELECT CAST(SUBSTR(return_date, 4, 2) AS INTEGER) AS m, COUNT(*) AS cnt
+                        FROM borrows
+                        WHERE return_date IS NOT NULL AND status = 'RETURNED'
+                          AND SUBSTR(return_date, 7, 4) = ?
+                        GROUP BY m
+                        """;
+                try (PreparedStatement ps = getConn().prepareStatement(sqlReturn)) {
+                    ps.setString(1, yearStr);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int m = rs.getInt("m");
+                            if (m >= 1 && m <= 12) returnCounts[m - 1] = rs.getInt("cnt");
+                        }
+                    }
+                }
+            }
+        }
+
+        return new com.example.model.ChartPeriodData(labels, borrowCounts, returnCounts);
+    }
+
+    /**
      * Thống kê số lượt mượn theo tháng trong năm chỉ định.
      * @return mảng int[12] — chỉ số 0 = tháng 1, ..., 11 = tháng 12
      */

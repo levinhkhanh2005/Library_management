@@ -393,18 +393,22 @@ public class BookPanel extends JPanel implements MainFrame.Refreshable {
             loadData(null);
             return;
         }
-        statusLabel.setText("Đang lọc theo thể loại: " + categoryName + "...");
+        statusLabel.setText("Đang lọc theo danh mục / khối ngành: " + categoryName + "...");
         SwingWorker<List<Book>, Void> worker = new SwingWorker<>() {
             @Override protected List<Book> doInBackground() throws Exception {
+                List<Book> majorBooks = bookService.getBooksByMajor(categoryName);
+                if (majorBooks != null && !majorBooks.isEmpty()) {
+                    return majorBooks;
+                }
                 return bookService.advancedSearchBooks(null, categoryName, null, null);
             }
             @Override protected void done() {
                 try {
                     currentBooks = get();
                     applyStockFilter();
-                    statusLabel.setText(String.format("Thể loại \"%s\": có %d cuốn sách", categoryName, currentBooks.size()));
+                    statusLabel.setText(String.format("Danh mục / Ngành \"%s\": có %d cuốn sách", categoryName, currentBooks.size()));
                 } catch (Exception ex) {
-                    UITheme.showError(BookPanel.this, "Lỗi lọc thể loại:\n" + ex.getMessage());
+                    UITheme.showError(BookPanel.this, "Lỗi lọc danh mục:\n" + ex.getMessage());
                 }
             }
         };

@@ -1,14 +1,10 @@
 package com.example.service;
 
-import com.example.dao.AuthorDAO;
 import com.example.dao.BookDAO;
 import com.example.dao.CategoryDAO;
-import com.example.dao.PublisherDAO;
-import com.example.model.Author;
 import com.example.model.Book;
 import com.example.model.Category;
 import com.example.model.CategoryBookStat;
-import com.example.model.Publisher;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -22,8 +18,6 @@ public class BookService {
 
     private final BookDAO bookDAO = new BookDAO();
     private final CategoryDAO categoryDAO = new CategoryDAO();
-    private final AuthorDAO authorDAO = new AuthorDAO();
-    private final PublisherDAO publisherDAO = new PublisherDAO();
 
     // ===================== Thêm sách =====================
 
@@ -55,22 +49,17 @@ public class BookService {
         }
 
         Book book = new Book(
-            isbn == null ? "" : isbn.trim(),
-            title.trim(), author.trim(),
-            category == null ? "" : category.trim(),
-            publisher == null ? "" : publisher.trim(),
-            publishYear, totalCopies,
-            description == null ? "" : description.trim()
+                isbn == null ? "" : isbn.trim(),
+                title.trim(), author.trim(),
+                category == null ? "" : category.trim(),
+                publisher == null ? "" : publisher.trim(),
+                publishYear, totalCopies,
+                description == null ? "" : description.trim()
         );
 
         int id = bookDAO.insert(book);
         if (id == -1) throw new SQLException("Thêm sách thất bại.");
         book.setId(id);
-
-        // Tự động đồng bộ NXB và Tác giả vào CSDL nếu chưa có
-        syncPublisherIfMissing(book.getPublisher());
-        syncAuthorIfMissing(book.getAuthor());
-
         return book;
     }
 
@@ -96,8 +85,8 @@ public class BookService {
             int currentlyBorrowed = current.getBorrowedCopies();
             if (book.getTotalCopies() < currentlyBorrowed) {
                 throw new IllegalArgumentException(
-                    "Không thể giảm tổng số bản xuống " + book.getTotalCopies() + ".\n" +
-                    "Hiện tại đang có " + currentlyBorrowed + " bản đang được bạn đọc mượn!"
+                        "Không thể giảm tổng số bản xuống " + book.getTotalCopies() + ".\n" +
+                                "Hiện tại đang có " + currentlyBorrowed + " bản đang được bạn đọc mượn!"
                 );
             }
         }
@@ -113,10 +102,6 @@ public class BookService {
         if (!bookDAO.update(book)) {
             throw new SQLException("Cập nhật sách thất bại. Sách có thể không tồn tại.");
         }
-
-        // Tự động đồng bộ NXB và Tác giả vào CSDL nếu chưa có
-        syncPublisherIfMissing(book.getPublisher());
-        syncAuthorIfMissing(book.getAuthor());
     }
 
     // ===================== Nghiệp vụ kho sách (Nhập thêm / Thanh lý) =====================
@@ -157,9 +142,9 @@ public class BookService {
         }
         if (discardCopies > book.getAvailableCopies()) {
             throw new IllegalStateException(
-                "Không thể thanh lý " + discardCopies + " bản sao.\n" +
-                "Hiện kho chỉ còn " + book.getAvailableCopies() + " bản có sẵn.\n" +
-                "(Vẫn còn " + book.getBorrowedCopies() + " bản đang được bạn đọc mượn ngoài thư viện)."
+                    "Không thể thanh lý " + discardCopies + " bản sao.\n" +
+                            "Hiện kho chỉ còn " + book.getAvailableCopies() + " bản có sẵn.\n" +
+                            "(Vẫn còn " + book.getBorrowedCopies() + " bản đang được bạn đọc mượn ngoài thư viện)."
             );
         }
         if (!bookDAO.discardCopies(bookId, discardCopies)) {
@@ -175,8 +160,8 @@ public class BookService {
     public void deleteBook(Book book) throws SQLException {
         if (book.getAvailableCopies() < book.getTotalCopies()) {
             throw new IllegalStateException(
-                "Không thể xóa sách \"" + book.getTitle() + "\".\n" +
-                "Vẫn còn " + book.getBorrowedCopies() + " bản đang được mượn."
+                    "Không thể xóa sách \"" + book.getTitle() + "\".\n" +
+                            "Vẫn còn " + book.getBorrowedCopies() + " bản đang được mượn."
             );
         }
         if (!bookDAO.delete(book.getId())) {
@@ -255,36 +240,27 @@ public class BookService {
         return bookDAO.getActiveBorrowersForBook(bookId);
     }
 
+    public List<Book> getBooksByMajor(String majorName) throws SQLException {
+        return bookDAO.getBooksByMajor(majorName);
+    }
+
+    public List<com.example.model.MajorBookStat> getMajorDistribution(boolean byTitleCount) throws SQLException {
+        List<com.example.model.MajorBookStat> stats = bookDAO.getMajorStats();
+        if (stats.isEmpty()) return stats;
+        double total = 0;
+        for (com.example.model.MajorBookStat s : stats) total += byTitleCount ? s.getTitleCount() : s.getTotalCopies();
+        if (total > 0) for (com.example.model.MajorBookStat s : stats) {
+            double v = byTitleCount ? s.getTitleCount() : s.getTotalCopies();
+            s.setPercentage(Math.round(v * 1000.0 / total) / 10.0);
+        }
+        return stats;
+    }
+
     // ===================== Helper =====================
 
     private void validateRequired(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " không được để trống.");
         }
-    }
-
-    private void syncPublisherIfMissing(String publisherName) {
-        if (publisherName == null || publisherName.trim().isBlank()) return;
-        String clean = publisherName.trim();
-        try {
-            Publisher existing = publisherDAO.findByName(clean);
-            if (existing == null && !clean.toUpperCase().startsWith("NXB ")) {
-                existing = publisherDAO.findByName("NXB " + clean);
-            }
-            if (existing == null) {
-                publisherDAO.insert(new Publisher(clean, "", "", "", "", "", ""));
-            }
-        } catch (Exception ignored) {}
-    }
-
-    private void syncAuthorIfMissing(String authorName) {
-        if (authorName == null || authorName.trim().isBlank()) return;
-        String clean = authorName.trim();
-        try {
-            Author existing = authorDAO.findByName(clean);
-            if (existing == null) {
-                authorDAO.insert(new Author(clean, null, null, "", ""));
-            }
-        } catch (Exception ignored) {}
     }
 }

@@ -385,6 +385,11 @@ public class BorrowService {
         return borrowDAO.getBorrowCountByMonth(year);
     }
 
+    public com.example.model.ChartPeriodData getBorrowAndReturnStats(
+            com.example.model.ChartPeriodData.TimePeriodMode mode, int year, int month) throws SQLException {
+        return borrowDAO.getBorrowAndReturnStats(mode, year, month);
+    }
+
     /**
      * Lấy tổng hợp số liệu thống kê mượn và trả sách.
      */
