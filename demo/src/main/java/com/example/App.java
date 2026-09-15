@@ -1,61 +1,27 @@
 package com.example;
 
-import com.example.service.BorrowService;
-import com.example.util.DatabaseConnection;
-import com.example.util.DatabaseInitializer;
-import com.example.view.LoginDialog;
-import com.example.view.ReaderPortalFrame;
-import com.example.view.UITheme;
-
-import javax.swing.*;
-
 /**
- * Điểm vào của ứng dụng Quản Lý Thư Viện Nguyễn Huệ.
+ * Điểm vào đa năng của ứng dụng Quản Lý Thư Viện Nguyễn Huệ.
+ * - Mặc định: Khởi chạy Ứng dụng Quản Trị (AdminApp).
+ * - Nếu truyền tham số "--reader" hoặc "-r": Khởi chạy Ứng dụng Độc Giả (ReaderApp).
  */
 public class App {
 
     public static void main(String[] args) {
-        // 1. Áp dụng Look & Feel (phải gọi trước khi tạo bất kỳ component nào)
-        UITheme.applyTheme();
-
-        // 2. Chạy toàn bộ UI trên Event Dispatch Thread
-        SwingUtilities.invokeLater(() -> {
-            try {
-                // 3. Khởi tạo CSDL (tạo bảng + dữ liệu mẫu nếu chưa có)
-                DatabaseInitializer.initialize();
-
-                // 4. Đồng bộ trạng thái quá hạn
-                int overdueUpdated = new BorrowService().syncOverdueStatus();
-                if (overdueUpdated > 0) {
-                    System.out.println("[APP] Đã cập nhật " + overdueUpdated + " phiếu mượn quá hạn.");
+        if (args != null && args.length > 0) {
+            for (String arg : args) {
+                if ("--reader".equalsIgnoreCase(arg) || "-r".equalsIgnoreCase(arg)) {
+                    ReaderApp.main(args);
+                    return;
                 }
-
-                // 5. Hiển thị màn hình đăng nhập
-                LoginDialog login = new LoginDialog(null);
-                login.setVisible(true);
-
-                // 6. Nếu đăng nhập thành công → mở cửa sổ tương ứng với vai trò
-                if (login.isLoginSuccess()) {
-                    ReaderPortalFrame.openFrameForCurrentUser();
+                if ("--admin".equalsIgnoreCase(arg) || "-a".equalsIgnoreCase(arg)) {
+                    AdminApp.main(args);
+                    return;
                 }
-                // Nếu đóng login mà không đăng nhập → thoát ứng dụng
-                else {
-                    DatabaseConnection.getInstance().closeConnection();
-                    System.exit(0);
-                }
-
-            } catch (Exception e) {
-                JOptionPane.showMessageDialog(null,
-                        "Lỗi khởi động ứng dụng:\n" + e.getMessage(),
-                        "Lỗi nghiêm trọng", JOptionPane.ERROR_MESSAGE);
-                System.exit(1);
             }
-        });
+        }
 
-        // Đóng kết nối DB khi JVM tắt
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            DatabaseConnection.getInstance().closeConnection();
-            System.out.println("[APP] Ứng dụng đã tắt.");
-        }));
+        // Mặc định khởi chạy ứng dụng Quản Trị
+        AdminApp.main(args);
     }
-}
+}

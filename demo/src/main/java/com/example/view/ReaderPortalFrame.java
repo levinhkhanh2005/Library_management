@@ -7,6 +7,7 @@ import com.example.model.Book;
 import com.example.model.Borrow;
 import com.example.model.Reader;
 import com.example.model.User;
+import com.example.ReaderApp;
 import com.example.service.AuthService;
 import com.example.service.BorrowService;
 import com.example.util.DatabaseConnection;
@@ -284,9 +285,21 @@ public class ReaderPortalFrame extends JFrame {
         });
         searchBar.add(searchField, BorderLayout.CENTER);
 
+        JPanel searchButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        searchButtons.setOpaque(false);
+
         JButton btnSearch = UITheme.createPrimaryButton("Tìm Kiếm");
         btnSearch.addActionListener(e -> doSearchBooks());
-        searchBar.add(btnSearch, BorderLayout.EAST);
+
+        JButton btnRefreshSearch = UITheme.createSecondaryButton("↺ Làm Mới");
+        btnRefreshSearch.addActionListener(e -> {
+            if (searchField != null) searchField.setText("");
+            doSearchBooks();
+        });
+
+        searchButtons.add(btnSearch);
+        searchButtons.add(btnRefreshSearch);
+        searchBar.add(searchButtons, BorderLayout.EAST);
 
         topPanel.add(searchBar, BorderLayout.EAST);
         panel.add(topPanel, BorderLayout.NORTH);
@@ -715,16 +728,7 @@ public class ReaderPortalFrame extends JFrame {
         new AuthService().logout();
         dispose();
 
-        SwingUtilities.invokeLater(() -> {
-            LoginDialog login = new LoginDialog(null);
-            login.setVisible(true);
-            if (login.isLoginSuccess()) {
-                openFrameForCurrentUser();
-            } else {
-                DatabaseConnection.getInstance().closeConnection();
-                System.exit(0);
-            }
-        });
+        SwingUtilities.invokeLater(ReaderApp::showLogin);
     }
 
     /** Mở frame tương ứng với vai trò người dùng sau khi đăng nhập lại. */

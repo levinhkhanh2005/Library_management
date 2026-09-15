@@ -197,6 +197,12 @@ public class DatabaseInitializer {
             VALUES ('thuthu', 'thuthu123', 'Nguyễn Thị Thu', 'LIBRARIAN', 1)
             """;
 
+    /** Chèn tài khoản độc giả mặc định (username: docgia / password: docgia123, liên kết thẻ NDG-0001). */
+    private static final String INSERT_DEFAULT_READER = """
+            INSERT OR IGNORE INTO users (username, password, full_name, role, active, email, reader_id)
+            VALUES ('docgia', 'docgia123', 'Nguyễn Thị Hoa', 'READER', 1, 'hoa.nguyen@email.com', 1)
+            """;
+
     /** Cấu hình SMTP mặc định cho Gmail. */
     private static final String[] INSERT_DEFAULT_SMTP = {
         "INSERT OR IGNORE INTO system_settings (key, value) VALUES ('smtp.host', 'smtp.gmail.com')",
@@ -421,6 +427,7 @@ public class DatabaseInitializer {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(INSERT_DEFAULT_ADMIN);
             stmt.execute(INSERT_DEFAULT_LIBRARIAN);
+            stmt.execute(INSERT_DEFAULT_READER);
             for (String sql : INSERT_DEFAULT_CATEGORIES) {
                 stmt.execute(sql);
             }

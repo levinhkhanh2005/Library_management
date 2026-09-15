@@ -1,5 +1,6 @@
 package com.example.view;
 
+import com.example.AdminApp;
 import com.example.service.AuthService;
 import com.example.service.BorrowService;
 import com.example.util.DatabaseConnection;
@@ -375,17 +376,8 @@ public class MainFrame extends JFrame {
         new AuthService().logout();
         dispose();
 
-        // Mở lại màn hình đăng nhập
-        SwingUtilities.invokeLater(() -> {
-            LoginDialog login = new LoginDialog(null);
-            login.setVisible(true);
-            if (login.isLoginSuccess()) {
-                ReaderPortalFrame.openFrameForCurrentUser();
-            } else {
-                DatabaseConnection.getInstance().closeConnection();
-                System.exit(0);
-            }
-        });
+        // Mở lại màn hình đăng nhập Quản Trị
+        SwingUtilities.invokeLater(AdminApp::showLogin);
     }
 
     // ================================================================
