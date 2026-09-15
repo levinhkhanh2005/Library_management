@@ -14,6 +14,7 @@ import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -49,6 +50,8 @@ public class BorrowDialog extends JDialog {
     // Selected
     private Book   selectedBook;
     private Reader selectedReader;
+    private final List<Book> selectedBooks = new ArrayList<>();
+    private DefaultListModel<Book> cartListModel;
 
     public BorrowDialog(Frame parent) {
         super(parent, "Tạo Phiếu Mượn Sách", true);
@@ -121,7 +124,7 @@ public class BorrowDialog extends JDialog {
         bookList.setCellRenderer(new BookListRenderer());
         JScrollPane scroll = new JScrollPane(bookList);
         scroll.setBorder(BorderFactory.createLineBorder(UITheme.BORDER_COLOR));
-        scroll.setPreferredSize(new Dimension(0, 200));
+        scroll.setPreferredSize(new Dimension(0, 140));
         panel.add(scroll, BorderLayout.CENTER);
 
         // Thông tin sách đã chọn
@@ -131,7 +134,62 @@ public class BorrowDialog extends JDialog {
         lblBookInfo.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(UITheme.BORDER_COLOR),
             new EmptyBorder(6, 10, 6, 10)));
-        panel.add(lblBookInfo, BorderLayout.SOUTH);
+
+        // Panel giỏ mượn (sách đã chọn)
+        JPanel cartPanel = new JPanel(new BorderLayout(0, 4));
+        cartPanel.setOpaque(false);
+
+        JLabel cartTitle = new JLabel("🛒 Giỏ Mượn (0 cuốn)");
+        cartTitle.setFont(UITheme.FONT_BOLD);
+        cartTitle.setForeground(UITheme.ACCENT_PRIMARY);
+
+        cartListModel = new DefaultListModel<>();
+        JList<Book> cartList = new JList<>(cartListModel);
+        cartList.setFont(UITheme.FONT_BODY);
+        cartList.setCellRenderer(new BookListRenderer());
+        JScrollPane cartScroll = new JScrollPane(cartList);
+        cartScroll.setBorder(BorderFactory.createLineBorder(UITheme.BORDER_COLOR));
+        cartScroll.setPreferredSize(new Dimension(0, 80));
+
+        JPanel cartButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        cartButtons.setOpaque(false);
+        JButton btnAddToCart = UITheme.createPrimaryButton("➕ Thêm");
+        btnAddToCart.setFont(UITheme.FONT_SMALL);
+        btnAddToCart.setPreferredSize(new Dimension(70, 26));
+        JButton btnRemoveFromCart = UITheme.createDangerButton("➖ Xóa");
+        btnRemoveFromCart.setFont(UITheme.FONT_SMALL);
+        btnRemoveFromCart.setPreferredSize(new Dimension(70, 26));
+
+        btnAddToCart.addActionListener(e -> {
+            Book sel = bookList.getSelectedValue();
+            if (sel != null && !selectedBooks.contains(sel)) {
+                selectedBooks.add(sel);
+                cartListModel.addElement(sel);
+                cartTitle.setText("🛒 Giỏ Mượn (" + selectedBooks.size() + " cuốn)");
+            }
+        });
+
+        btnRemoveFromCart.addActionListener(e -> {
+            Book sel = cartList.getSelectedValue();
+            if (sel != null) {
+                selectedBooks.remove(sel);
+                cartListModel.removeElement(sel);
+                cartTitle.setText("🛒 Giỏ Mượn (" + selectedBooks.size() + " cuốn)");
+            }
+        });
+
+        cartButtons.add(btnAddToCart);
+        cartButtons.add(btnRemoveFromCart);
+
+        cartPanel.add(cartTitle, BorderLayout.NORTH);
+        cartPanel.add(cartScroll, BorderLayout.CENTER);
+        cartPanel.add(cartButtons, BorderLayout.SOUTH);
+
+        JPanel southPanel = new JPanel(new BorderLayout(0, 6));
+        southPanel.setOpaque(false);
+        southPanel.add(lblBookInfo, BorderLayout.NORTH);
+        southPanel.add(cartPanel, BorderLayout.CENTER);
+        panel.add(southPanel, BorderLayout.SOUTH);
 
         // Sự kiện
         Runnable searchBooks = () -> {
@@ -157,6 +215,16 @@ public class BorrowDialog extends JDialog {
                     + "  |  " + selectedBook.getAuthor()
                     + "  |  Còn: <font color='#10B981'>"
                     + selectedBook.getAvailableCopies() + " bản</font></html>");
+            }
+        });
+
+        // Double-click to add to cart
+        bookList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    btnAddToCart.doClick();
+                }
             }
         });
 
@@ -317,8 +385,13 @@ public class BorrowDialog extends JDialog {
     // ================================================================
 
     private void save() {
-        if (selectedBook == null) {
-            UITheme.showWarning(this, "Vui lòng chọn một cuốn sách."); return;
+        // Hỗ trợ cả chọn từ giỏ và chọn đơn lẻ
+        List<Book> booksToSave = new ArrayList<>(selectedBooks);
+        if (booksToSave.isEmpty() && selectedBook != null) {
+            booksToSave.add(selectedBook);
+        }
+        if (booksToSave.isEmpty()) {
+            UITheme.showWarning(this, "Vui lòng chọn ít nhất một cuốn sách."); return;
         }
         if (selectedReader == null) {
             UITheme.showWarning(this, "Vui lòng chọn một độc giả."); return;
@@ -329,8 +402,9 @@ public class BorrowDialog extends JDialog {
         }
 
         try {
-            Borrow createdBorrow = borrowService.borrowBook(
-                selectedBook.getId(),
+            List<Integer> bookIds = booksToSave.stream().map(Book::getId).toList();
+            List<Borrow> createdBorrows = borrowService.borrowMultipleBooks(
+                bookIds,
                 selectedReader.getId(),
                 dueDate,
                 fNotes.getText().trim()
@@ -339,19 +413,24 @@ public class BorrowDialog extends JDialog {
             Window parentWindow = SwingUtilities.getWindowAncestor(this);
             dispose();
 
+            StringBuilder bookNames = new StringBuilder();
+            for (Borrow b : createdBorrows) {
+                bookNames.append("  \u2022 #").append(b.getId()).append(" ").append(b.getBookTitle()).append("\n");
+            }
+
             int choice = JOptionPane.showConfirmDialog(parentWindow,
-                "Tạo phiếu mượn #" + createdBorrow.getId() + " thành công!\n"
-                + "📚 Sách: " + selectedBook.getTitle() + "\n"
-                + "👤 Độc giả: " + selectedReader.getFullName() + "\n"
-                + "📅 Hạn trả: " + dueDate + "\n\n"
-                + "Bạn có muốn xem trước và xuất file PDF phiếu mượn ngay không?",
+                "Tạo thành công " + createdBorrows.size() + " phiếu mượn!\n"
+                + bookNames
+                + "\n\ud83d\udc64 \u0110\u1ed9c gi\u1ea3: " + selectedReader.getFullName() + "\n"
+                + "\ud83d\udcc5 H\u1ea1n tr\u1ea3: " + dueDate + "\n\n"
+                + "B\u1ea1n c\u00f3 mu\u1ed1n xem tr\u01b0\u1edbc v\u00e0 xu\u1ea5t file PDF phi\u1ebfu m\u01b0\u1ee3n ngay kh\u00f4ng?",
                 "Tạo Phiếu Mượn Thành Công",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.INFORMATION_MESSAGE);
 
-            if (choice == JOptionPane.YES_OPTION) {
+            if (choice == JOptionPane.YES_OPTION && !createdBorrows.isEmpty()) {
                 ReceiptPreviewDialog preview = new ReceiptPreviewDialog(
-                    parentWindow, createdBorrow, ReceiptPreviewDialog.ReceiptType.BORROW_SLIP);
+                    parentWindow, createdBorrows.get(0), ReceiptPreviewDialog.ReceiptType.BORROW_SLIP);
                 preview.setVisible(true);
             }
         } catch (IllegalArgumentException | IllegalStateException ex) {
