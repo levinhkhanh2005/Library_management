@@ -190,6 +190,15 @@ public class BorrowDAO {
         }
     }
 
+    /** Lấy N phiếu mượn mới nhất. */
+    public List<Borrow> getRecentBorrows(int limit) throws SQLException {
+        String sql = SELECT_WITH_JOIN + " ORDER BY b.id DESC LIMIT ?";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            return mapList(ps.executeQuery());
+        }
+    }
+
     /** Tìm phiếu mượn theo id. */
     public Borrow findById(int id) throws SQLException {
         String sql = SELECT_WITH_JOIN + " WHERE b.id = ?";
@@ -234,6 +243,26 @@ public class BorrowDAO {
         String sql = SELECT_WITH_JOIN + " WHERE b.reader_id = ? ORDER BY b.id DESC";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, readerId);
+            return mapList(ps.executeQuery());
+        }
+    }
+
+    /** Lấy phiếu mượn đang hoạt động của một độc giả (chưa trả). */
+    public List<Borrow> findActiveByReader(int readerId) throws SQLException {
+        String sql = SELECT_WITH_JOIN +
+                     " WHERE b.reader_id = ? AND b.status IN ('BORROWING','OVERDUE') ORDER BY b.due_date";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setInt(1, readerId);
+            return mapList(ps.executeQuery());
+        }
+    }
+
+    /** Tìm phiếu mượn đang hoạt động theo mã thẻ độc giả. */
+    public List<Borrow> findActiveByReaderCode(String readerCode) throws SQLException {
+        String sql = SELECT_WITH_JOIN +
+                     " WHERE r.reader_code = ? AND b.status IN ('BORROWING','OVERDUE') ORDER BY b.due_date";
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, readerCode.trim());
             return mapList(ps.executeQuery());
         }
     }
@@ -506,6 +535,33 @@ public class BorrowDAO {
         String sql = "SELECT COUNT(*) FROM borrows WHERE status = 'OVERDUE'";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
+            return rs.next() ? rs.getInt(1) : 0;
+        }
+    }
+
+    /**
+     * Đếm số phiếu mượn sắp hết hạn (còn ≤ thresholdDays ngày, trạng thái BORROWING).
+     * Dùng SUBSTR để chuyển dd/MM/yyyy sang yyyyMMdd và so sánh chuỗi.
+     */
+    public int countDueSoon(int thresholdDays) throws SQLException {
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        String threshold = LocalDate.now().plusDays(thresholdDays).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        String sql = """
+                SELECT COUNT(*) FROM borrows
+                WHERE status = 'BORROWING'
+                  AND SUBSTR(due_date,7,4)||SUBSTR(due_date,4,2)||SUBSTR(due_date,1,2)
+                      >= SUBSTR(?,7,4)||SUBSTR(?,4,2)||SUBSTR(?,1,2)
+                  AND SUBSTR(due_date,7,4)||SUBSTR(due_date,4,2)||SUBSTR(due_date,1,2)
+                      <= SUBSTR(?,7,4)||SUBSTR(?,4,2)||SUBSTR(?,1,2)
+                """;
+        try (PreparedStatement ps = getConn().prepareStatement(sql)) {
+            ps.setString(1, today);
+            ps.setString(2, today);
+            ps.setString(3, today);
+            ps.setString(4, threshold);
+            ps.setString(5, threshold);
+            ps.setString(6, threshold);
+            ResultSet rs = ps.executeQuery();
             return rs.next() ? rs.getInt(1) : 0;
         }
     }

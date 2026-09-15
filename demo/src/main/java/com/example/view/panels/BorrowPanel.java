@@ -6,9 +6,11 @@ import com.example.service.BorrowService;
 import com.example.service.EmailService;
 import com.example.view.MainFrame;
 import com.example.view.UITheme;
+import com.example.view.dialogs.BorrowDetailDialog;
 import com.example.view.dialogs.BorrowDialog;
 import com.example.view.dialogs.BorrowStatsDialog;
 import com.example.view.dialogs.OverdueReminderDialog;
+import com.example.view.dialogs.QuickReturnDialog;
 import com.example.view.dialogs.ReceiptPreviewDialog;
 
 import javax.swing.*;
@@ -17,6 +19,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -40,11 +43,11 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
 
     private static final String[] COLUMNS = {
         "#", "Mã Phiếu", "Tên Sách", "Độc Giả", "Mã Thẻ",
-        "Ngày Mượn", "Hạn Trả", "Gia Hạn", "Ngày Trả", "Trạng Thái", "Phạt (đ)"
+        "Ngày Mượn", "Hạn Trả", "Gia Hạn", "Ngày Trả", "Còn Lại", "Trạng Thái", "Phạt (đ)"
     };
 
     private static final String[] FILTER_OPTIONS = {
-        "Tất cả", "Đang mượn", "Quá hạn", "Đã trả", "Mất sách"
+        "Tất cả", "Đang mượn", "Sắp hạn", "Quá hạn", "Đã trả", "Mất sách"
     };
 
     public BorrowPanel() {
@@ -187,16 +190,17 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         JPanel leftGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         leftGroup.setOpaque(false);
 
-        JButton btnNew        = UITheme.createPrimaryButton("＋  Tạo Phiếu Mượn");
-        btnReturn             = UITheme.createSuccessButton("✓  Trả Sách");
-        btnRenew              = UITheme.createSecondaryButton("⏳  Gia Hạn");
-        btnLost               = UITheme.createDangerButton("⚠  Báo Mất");
-        btnExportPdf          = UITheme.createSecondaryButton("📄  Xuất PDF");
-        btnEmailRemind        = UITheme.createSecondaryButton("📧  Nhắc Email");
-        btnDelete             = UITheme.createDangerButton("✕  Xóa Phiếu");
+        JButton btnNew         = UITheme.createPrimaryButton("＋  Tạo Phiếu Mượn");
+        btnReturn              = UITheme.createSuccessButton("✓  Trả Sách");
+        JButton btnQuickReturn = UITheme.createSuccessButton("⚡  Trả Nhanh");
+        btnRenew               = UITheme.createSecondaryButton("⏳  Gia Hạn");
+        btnLost                = UITheme.createDangerButton("⚠  Báo Mất");
+        btnExportPdf           = UITheme.createSecondaryButton("📄  Xuất PDF");
+        btnEmailRemind         = UITheme.createSecondaryButton("📧  Nhắc Email");
+        btnDelete              = UITheme.createDangerButton("✕  Xóa Phiếu");
         JButton btnOverdueList = UITheme.createSecondaryButton("🔔  DS Quá Hạn");
-        JButton btnStats      = UITheme.createSecondaryButton("📊  Thống Kê");
-        JButton btnRefresh    = UITheme.createSecondaryButton("↺  Làm Mới");
+        JButton btnStats       = UITheme.createSecondaryButton("📊  Thống Kê");
+        JButton btnRefresh     = UITheme.createSecondaryButton("↺  Làm Mới");
 
         btnReturn.setEnabled(false);
         btnRenew.setEnabled(false);
@@ -207,6 +211,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
 
         leftGroup.add(btnNew);
         leftGroup.add(btnReturn);
+        leftGroup.add(btnQuickReturn);
         leftGroup.add(btnRenew);
         leftGroup.add(btnLost);
         leftGroup.add(btnExportPdf);
@@ -237,6 +242,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         // Sự kiện
         btnNew.addActionListener(e -> openBorrowDialog());
         btnReturn.addActionListener(e -> returnSelected());
+        btnQuickReturn.addActionListener(e -> openQuickReturnDialog());
         btnRenew.addActionListener(e -> renewSelected());
         btnLost.addActionListener(e -> reportLostSelected());
         btnExportPdf.addActionListener(e -> exportPdfSelected());
@@ -273,19 +279,45 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
 
         table = new JTable(tableModel);
         UITheme.styleTable(table);
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
-        int[] widths = {40, 70, 210, 140, 75, 90, 90, 65, 90, 95, 85};
+        // Cột: #, Mã Phiếu, Tên Sách, Độc Giả, Mã Thẻ, Ngày Mượn, Hạn Trả, Gia Hạn, Ngày Trả, Còn Lại, Trạng Thái, Phạt
+        int[] widths = {40, 70, 200, 130, 75, 90, 90, 55, 90, 80, 95, 85};
         for (int i = 0; i < widths.length && i < table.getColumnModel().getColumnCount(); i++) {
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         }
         table.getColumnModel().getColumn(0).setMaxWidth(50);
 
-        // Renderer cột "Trạng Thái" (cột 9)
+        // Renderer cột "Còn Lại" (cột 9) — color-coded
         table.getColumnModel().getColumn(9).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(
                     JTable t, Object val, boolean sel, boolean foc, int row, int col) {
-                JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 6));
+                super.getTableCellRendererComponent(t, val, sel, foc, row, col);
+                setHorizontalAlignment(CENTER);
+                setFont(UITheme.FONT_BOLD);
+                if (!sel && val != null) {
+                    String text = val.toString();
+                    if (text.contains("quá")) {
+                        setForeground(UITheme.COLOR_DANGER);
+                    } else if (text.equals("—") || text.isEmpty()) {
+                        setForeground(UITheme.TEXT_MUTED);
+                    } else if (text.contains("hôm") || text.startsWith("1 ") || text.startsWith("2 ") || text.startsWith("3 ")) {
+                        setForeground(UITheme.COLOR_WARNING);
+                    } else {
+                        setForeground(UITheme.COLOR_SUCCESS);
+                    }
+                }
+                return this;
+            }
+        });
+
+        // Renderer cột "Trạng Thái" (cột 10) — badges with "Sắp hạn" support
+        table.getColumnModel().getColumn(10).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(
+                    JTable t, Object val, boolean sel, boolean foc, int row, int col) {
+                JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 6));
                 wrapper.setOpaque(true);
                 wrapper.setBackground(sel ? UITheme.TABLE_ROW_SELECTED
                         : (row % 2 == 0 ? UITheme.TABLE_ROW_ODD : UITheme.TABLE_ROW_EVEN));
@@ -296,12 +328,23 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                 else if (s.equals(Borrow.Status.LOST.getLabel()))     badge = UITheme.createBadge(s, "warning");
                 else                                                    badge = UITheme.createBadge(s, "info");
                 wrapper.add(badge);
+
+                // Thêm badge "Sắp hạn" nếu cột "Còn Lại" cho thấy sắp hết hạn
+                int modelRow = table.convertRowIndexToModel(row);
+                if (modelRow >= 0 && modelRow < tableModel.getRowCount()) {
+                    String remainVal = String.valueOf(tableModel.getValueAt(modelRow, 9));
+                    if (s.equals(Borrow.Status.BORROWING.getLabel()) &&
+                        (remainVal.contains("hôm") || remainVal.startsWith("1 ") || remainVal.startsWith("2 ") || remainVal.startsWith("3 "))) {
+                        JLabel dueSoonBadge = UITheme.createBadge("Sắp hạn", "warning");
+                        wrapper.add(dueSoonBadge);
+                    }
+                }
                 return wrapper;
             }
         });
 
-        // Renderer cột "Phạt" (cột 10) — đỏ nếu > 0
-        table.getColumnModel().getColumn(10).setCellRenderer(new DefaultTableCellRenderer() {
+        // Renderer cột "Phạt" (cột 11) — đỏ nếu > 0
+        table.getColumnModel().getColumn(11).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(
                     JTable t, Object val, boolean sel, boolean foc, int row, int col) {
@@ -317,17 +360,17 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             }
         });
 
-        // Căn giữa cột số thứ tự, mã phiếu, mã thẻ, hạn trả, gia hạn
+        // Căn giữa cột số thứ tự, mã phiếu, mã thẻ, gia hạn
         DefaultTableCellRenderer center = new DefaultTableCellRenderer();
         center.setHorizontalAlignment(SwingConstants.CENTER);
         for (int col : new int[]{0, 1, 4, 7}) {
             table.getColumnModel().getColumn(col).setCellRenderer(center);
         }
 
-        // Chọn dòng → bật/tắt nút
+        // Chọn dòng → bật/tắt nút (hỗ trợ multi-select)
         table.getSelectionModel().addListSelectionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row < 0) {
+            int[] rows = table.getSelectedRows();
+            if (rows.length == 0) {
                 btnReturn.setEnabled(false);
                 btnRenew.setEnabled(false);
                 btnLost.setEnabled(false);
@@ -335,17 +378,36 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                 btnDelete.setEnabled(false);
                 return;
             }
-            int modelRow = table.convertRowIndexToModel(row);
-            String statusText = (String) tableModel.getValueAt(modelRow, 9);
-            boolean isBorrowing = statusText.equals(Borrow.Status.BORROWING.getLabel());
-            boolean isOverdue   = statusText.equals(Borrow.Status.OVERDUE.getLabel());
 
-            btnReturn.setEnabled(isBorrowing || isOverdue);
-            btnRenew.setEnabled(isBorrowing || isOverdue);
-            btnLost.setEnabled(isBorrowing || isOverdue);
-            btnEmailRemind.setEnabled(isOverdue);
-            btnExportPdf.setEnabled(true);
+            // Kiểm tra trạng thái của các dòng đã chọn
+            boolean anyActive = false;
+            boolean anyOverdue = false;
+            for (int row : rows) {
+                int modelRow = table.convertRowIndexToModel(row);
+                String statusText = (String) tableModel.getValueAt(modelRow, 10);
+                if (statusText.equals(Borrow.Status.BORROWING.getLabel())) anyActive = true;
+                if (statusText.equals(Borrow.Status.OVERDUE.getLabel())) {
+                    anyActive = true;
+                    anyOverdue = true;
+                }
+            }
+
+            btnReturn.setEnabled(anyActive);
+            btnRenew.setEnabled(anyActive && rows.length == 1); // Gia hạn chỉ từng phiếu
+            btnLost.setEnabled(anyActive && rows.length == 1);
+            btnEmailRemind.setEnabled(anyOverdue);
+            btnExportPdf.setEnabled(rows.length == 1);
             btnDelete.setEnabled(true);
+        });
+
+        // Double-click mở chi tiết phiếu mượn
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && table.getSelectedRow() >= 0) {
+                    openBorrowDetailDialog();
+                }
+            }
         });
 
         return UITheme.createTableScrollPane(table);
@@ -380,6 +442,9 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                 return switch (filter) {
                     case "Đang mượn" -> borrowService.getActiveBorrows().stream()
                         .filter(b -> b.getStatus() == Borrow.Status.BORROWING)
+                        .toList();
+                    case "Sắp hạn"   -> borrowService.getActiveBorrows().stream()
+                        .filter(b -> b.isDueSoon(BorrowService.DUE_SOON_DAYS))
                         .toList();
                     case "Quá hạn"   -> borrowService.getOverdueBorrows();
                     case "Đã trả"    -> borrowService.getAllBorrows().stream()
@@ -418,6 +483,22 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                 String fine = b.getFineAmount() > 0
                     ? UITheme.formatCurrency(b.getFineAmount()) : "—";
                 String renewDisplay = b.getRenewCount() + "/" + BorrowService.MAX_RENEW_COUNT;
+
+                // Tính cột "Còn lại"
+                String remainStr;
+                if (b.isActive()) {
+                    long daysRemaining = b.getDaysRemaining();
+                    if (daysRemaining < 0) {
+                        remainStr = Math.abs(daysRemaining) + " ngày quá";
+                    } else if (daysRemaining == 0) {
+                        remainStr = "hôm nay";
+                    } else {
+                        remainStr = daysRemaining + " ngày";
+                    }
+                } else {
+                    remainStr = "—";
+                }
+
                 tableModel.addRow(new Object[]{
                     idx++,
                     b.getId(),
@@ -428,16 +509,18 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
                     b.getDueDate(),
                     renewDisplay,
                     b.getReturnDate() != null ? b.getReturnDate() : "—",
+                    remainStr,
                     b.getStatus().getLabel(),
                     fine
                 });
             }
             long active  = list.stream().filter(Borrow::isActive).count();
             long overdue = list.stream().filter(b -> b.getStatus() == Borrow.Status.OVERDUE).count();
+            long dueSoon = list.stream().filter(b -> b.isDueSoon(BorrowService.DUE_SOON_DAYS)).count();
             long lost    = list.stream().filter(Borrow::isLost).count();
             statusLabel.setText(String.format(
-                "Tổng hiển thị: %d phiếu (%d sách)  |  Đang mượn: %d cuốn  |  Quá hạn: %d cuốn  |  Mất: %d cuốn",
-                list.size(), list.size(), active, overdue, lost));
+                "Tổng: %d phiếu  |  Đang mượn: %d  |  Sắp hạn: %d  |  Quá hạn: %d  |  Mất: %d",
+                list.size(), active, dueSoon, overdue, lost));
             btnReturn.setEnabled(false);
             btnRenew.setEnabled(false);
             btnLost.setEnabled(false);
@@ -474,7 +557,11 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             + (stats.getTodayBorrows() > 0 ? " (+" + stats.getTodayBorrows() + " hôm nay)" : ""));
 
         lblCardBorrowingVal.setText(stats.getBorrowingCount() + " cuốn");
-        lblCardBorrowingSub.setText(stats.getBorrowingCount() + " sách đang mượn lưu hành");
+        String borrowingSub = stats.getBorrowingCount() + " sách đang mượn";
+        if (stats.getDueSoonCount() > 0) {
+            borrowingSub += " (⚠ " + stats.getDueSoonCount() + " sắp hạn)";
+        }
+        lblCardBorrowingSub.setText(borrowingSub);
 
         lblCardReturnedVal.setText(stats.getReturnedCount() + " cuốn");
         lblCardReturnedSub.setText(stats.getReturnedCount() + " sách đã trả xong (" + stats.getFormattedReturnRate() + ")");
@@ -490,7 +577,12 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
         SwingWorker<BorrowStats, Void> worker = new SwingWorker<>() {
             @Override
             protected BorrowStats doInBackground() throws Exception {
-                return borrowService.getBorrowStats();
+                BorrowStats stats = borrowService.getBorrowStats();
+                // Bổ sung đếm dueSoon
+                try {
+                    stats.setDueSoonCount(borrowService.getDueSoonCount());
+                } catch (Exception ignored) {}
+                return stats;
             }
 
             @Override
@@ -518,6 +610,23 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
             catch (NumberFormatException ignored) {}
         }
         return -1;
+    }
+
+    /** Lấy danh sách borrowId từ các dòng đang chọn (multi-select). */
+    private List<Integer> getSelectedBorrowIds() {
+        List<Integer> ids = new ArrayList<>();
+        for (int row : table.getSelectedRows()) {
+            int modelRow = table.convertRowIndexToModel(row);
+            Object val = tableModel.getValueAt(modelRow, 1);
+            int id = -1;
+            if (val instanceof Number n) id = n.intValue();
+            else if (val != null) {
+                try { id = Integer.parseInt(val.toString().trim()); }
+                catch (NumberFormatException ignored) {}
+            }
+            if (id > 0) ids.add(id);
+        }
+        return ids;
     }
 
     public void openBorrowDialog() {
@@ -630,52 +739,64 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
     }
 
     private void returnSelected() {
-        int borrowId = getSelectedBorrowId();
-        if (borrowId < 0) { UITheme.showWarning(this, "Vui lòng chọn một phiếu mượn."); return; }
+        List<Integer> borrowIds = getSelectedBorrowIds();
+        if (borrowIds.isEmpty()) {
+            UITheme.showWarning(this, "Vui lòng chọn ít nhất một phiếu mượn.");
+            return;
+        }
 
-        int row = table.getSelectedRow();
-        int modelRow = table.convertRowIndexToModel(row);
-        String bookTitle  = (String) tableModel.getValueAt(modelRow, 2);
-        String readerName = (String) tableModel.getValueAt(modelRow, 3);
-        String dueDate    = (String) tableModel.getValueAt(modelRow, 6);
+        // Lọc chỉ giữ các phiếu đang mượn/quá hạn
+        List<Integer> activeIds = new ArrayList<>();
+        StringBuilder summary = new StringBuilder();
+        double totalFine = 0;
+        for (int row : table.getSelectedRows()) {
+            int modelRow = table.convertRowIndexToModel(row);
+            String statusText = (String) tableModel.getValueAt(modelRow, 10);
+            if (statusText.equals(Borrow.Status.BORROWING.getLabel()) ||
+                statusText.equals(Borrow.Status.OVERDUE.getLabel())) {
+                Object val = tableModel.getValueAt(modelRow, 1);
+                int id = -1;
+                if (val instanceof Number n) id = n.intValue();
+                else if (val != null) {
+                    try { id = Integer.parseInt(val.toString().trim()); } catch (NumberFormatException ignored) {}
+                }
+                if (id > 0) {
+                    activeIds.add(id);
+                    String bookTitle = (String) tableModel.getValueAt(modelRow, 2);
+                    String dueDate = (String) tableModel.getValueAt(modelRow, 6);
+                    double fine = borrowService.calculateCurrentFine(dueDate);
+                    totalFine += fine;
+                    summary.append("  • ").append(bookTitle);
+                    if (fine > 0) summary.append(" (phạt: ").append(UITheme.formatCurrency(fine)).append(")");
+                    summary.append("\n");
+                }
+            }
+        }
 
-        // Tính tiền phạt trước
-        double fine = borrowService.calculateCurrentFine(dueDate);
-        String fineMsg = fine > 0
-            ? "\n⚠ Tiền phạt quá hạn: " + UITheme.formatCurrency(fine)
+        if (activeIds.isEmpty()) {
+            UITheme.showWarning(this, "Không có phiếu nào có thể trả sách.");
+            return;
+        }
+
+        String fineMsg = totalFine > 0
+            ? "\n⚠ Tổng tiền phạt dự kiến: " + UITheme.formatCurrency(totalFine)
             : "\n✓ Trả đúng hạn, không có phạt.";
 
         boolean confirm = UITheme.showConfirm(this,
-            "Xác nhận trả sách:\n"
-            + "📚 Sách: " + bookTitle + "\n"
-            + "👤 Độc giả: " + readerName
-            + fineMsg,
+            "Xác nhận trả " + activeIds.size() + " cuốn sách:\n" + summary + fineMsg,
             "Xác nhận Trả Sách");
         if (!confirm) return;
 
         try {
-            Borrow updated = borrowService.returnBook(borrowId);
+            List<Borrow> results = borrowService.returnMultipleBooks(activeIds);
             loadData("Tất cả", searchField.getText());
 
-            if (updated.getFineAmount() > 0) {
-                int choice = JOptionPane.showConfirmDialog(this,
-                    "Đã ghi nhận trả sách \"" + bookTitle + "\" thành công!\n"
-                    + "💰 Tiền phạt quá hạn: " + UITheme.formatCurrency(updated.getFineAmount()) + "\n\n"
-                    + "Bạn có muốn xem trước và xuất file PDF Biên lai thu tiền phạt ngay không?",
-                    "Xuất Biên Lai Thu Tiền Phạt",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE);
-
-                if (choice == JOptionPane.YES_OPTION) {
-                    ReceiptPreviewDialog dlg = new ReceiptPreviewDialog(
-                        SwingUtilities.getWindowAncestor(this),
-                        updated,
-                        ReceiptPreviewDialog.ReceiptType.FINE_RECEIPT);
-                    dlg.setVisible(true);
-                }
-            } else {
-                UITheme.showSuccess(this, "Đã ghi nhận trả sách \"" + bookTitle + "\" thành công!");
+            double actualFine = results.stream().mapToDouble(Borrow::getFineAmount).sum();
+            String msg = "Đã trả thành công " + results.size() + "/" + activeIds.size() + " cuốn sách!";
+            if (actualFine > 0) {
+                msg += "\n💰 Tổng tiền phạt: " + UITheme.formatCurrency(actualFine);
             }
+            UITheme.showSuccess(this, msg);
         } catch (Exception ex) {
             UITheme.showError(this, ex.getMessage());
         }
@@ -725,7 +846,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
 
         int row = table.getSelectedRow();
         int modelRow = table.convertRowIndexToModel(row);
-        String statusTxt = (String) tableModel.getValueAt(modelRow, 9);
+        String statusTxt = (String) tableModel.getValueAt(modelRow, 10);
 
         String msg = "Xóa phiếu mượn #" + borrowId + "?";
         if (!statusTxt.equals(Borrow.Status.RETURNED.getLabel())) {
@@ -814,7 +935,7 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
 
         int row = table.getSelectedRow();
         int modelRow = table.convertRowIndexToModel(row);
-        String statusText = (String) tableModel.getValueAt(modelRow, 9);
+        String statusText = (String) tableModel.getValueAt(modelRow, 10);
         if (!statusText.equals(Borrow.Status.OVERDUE.getLabel())) {
             UITheme.showWarning(this, "Chỉ có thể gửi nhắc nhở cho phiếu Quá hạn.");
             return;
@@ -931,5 +1052,27 @@ public class BorrowPanel extends JPanel implements MainFrame.Refreshable {
 
     @Override public void refresh() {
         loadData("Tất cả", searchField != null ? searchField.getText() : null);
+    }
+
+    /** Mở dialog Trả Nhanh. */
+    private void openQuickReturnDialog() {
+        QuickReturnDialog dlg = new QuickReturnDialog(
+            SwingUtilities.getWindowAncestor(this));
+        dlg.setVisible(true);
+        if (dlg.isReturned()) {
+            loadData("Tất cả", searchField.getText());
+        }
+    }
+
+    /** Mở dialog chi tiết phiếu mượn (double-click). */
+    private void openBorrowDetailDialog() {
+        int borrowId = getSelectedBorrowId();
+        if (borrowId < 0) return;
+        BorrowDetailDialog dlg = new BorrowDetailDialog(
+            SwingUtilities.getWindowAncestor(this), borrowId);
+        dlg.setVisible(true);
+        if (dlg.isChanged()) {
+            loadData("Tất cả", searchField.getText());
+        }
     }
 }

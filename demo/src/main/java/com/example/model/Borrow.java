@@ -1,5 +1,9 @@
 package com.example.model;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+
 /**
  * Model đại diện cho một phiếu mượn/trả sách.
  */
@@ -157,6 +161,30 @@ public class Borrow {
     /** Kiểm tra xem phiếu có thể gia hạn hay không dựa trên số lần tối đa. */
     public boolean canRenew(int maxRenewCount) {
         return isActive() && renewCount < maxRenewCount;
+    }
+
+    /**
+     * Tính số ngày còn lại đến hạn trả (dương = còn hạn, âm = quá hạn).
+     * Trả về 0 nếu phiếu đã trả/mất hoặc không parse được ngày.
+     */
+    public long getDaysRemaining() {
+        if (!isActive() || dueDate == null || dueDate.isBlank()) return 0;
+        try {
+            LocalDate due = LocalDate.parse(dueDate, DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            return ChronoUnit.DAYS.between(LocalDate.now(), due);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Kiểm tra phiếu mượn sắp hết hạn (còn ≤ thresholdDays ngày).
+     * Chỉ áp dụng cho phiếu đang mượn (BORROWING), không phải đã quá hạn.
+     */
+    public boolean isDueSoon(int thresholdDays) {
+        if (status != Status.BORROWING) return false;
+        long remaining = getDaysRemaining();
+        return remaining >= 0 && remaining <= thresholdDays;
     }
 
     @Override
