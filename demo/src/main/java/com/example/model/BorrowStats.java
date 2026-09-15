@@ -20,6 +20,7 @@ public class BorrowStats {
     private int monthReturns;      // Số sách trả tháng này
 
     private double totalFines;     // Tổng tiền phạt đã thu (VNĐ)
+    private int dueSoonCount;      // Số sách sắp đến hạn trả (≤ 3 ngày)
 
     public BorrowStats() {}
 
@@ -119,6 +120,14 @@ public class BorrowStats {
 
     public void setTotalFines(double totalFines) {
         this.totalFines = totalFines;
+    }
+
+    public int getDueSoonCount() {
+        return dueSoonCount;
+    }
+
+    public void setDueSoonCount(int dueSoonCount) {
+        this.dueSoonCount = dueSoonCount;
     }
 
     // ===================== Tiện ích tính toán =====================

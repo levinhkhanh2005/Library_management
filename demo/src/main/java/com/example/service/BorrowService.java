@@ -13,6 +13,7 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.example.util.DatabaseConnection;
@@ -42,6 +43,9 @@ public class BorrowService {
 
     /** Tiền bồi thường mặc định khi mất sách (VND). */
     public static final double DEFAULT_LOST_COMPENSATION = 100_000.0;
+
+    /** Số ngày ngưỡng cảnh báo sắp hết hạn. */
+    public static final int DUE_SOON_DAYS = 3;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -131,6 +135,41 @@ public class BorrowService {
         return borrow;
     }
 
+    /**
+     * Mượn nhiều sách cùng lúc cho một độc giả.
+     * Tạo nhiều phiếu mượn riêng lẻ, mỗi phiếu 1 cuốn sách.
+     *
+     * @param bookIds    Danh sách ID sách cần mượn
+     * @param readerId   ID độc giả
+     * @param dueDateStr Ngày hạn trả (dd/MM/yyyy)
+     * @param notes      Ghi chú
+     * @return Danh sách Borrow vừa tạo
+     */
+    public List<Borrow> borrowMultipleBooks(List<Integer> bookIds, int readerId,
+                                            String dueDateStr, String notes) throws SQLException {
+        if (bookIds == null || bookIds.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn ít nhất một cuốn sách.");
+        }
+
+        List<Borrow> results = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+
+        for (int bookId : bookIds) {
+            try {
+                Borrow b = borrowBook(bookId, readerId, dueDateStr, notes);
+                results.add(b);
+            } catch (Exception e) {
+                errors.add(e.getMessage());
+            }
+        }
+
+        if (results.isEmpty() && !errors.isEmpty()) {
+            throw new SQLException("Không tạo được phiếu mượn nào:\n" + String.join("\n", errors));
+        }
+
+        return results;
+    }
+
     // ===================== Trả sách =====================
 
     /**
@@ -167,6 +206,36 @@ public class BorrowService {
         borrow.setStatus(status);
         borrow.setFineAmount(fine);
         return borrow;
+    }
+
+    /**
+     * Trả nhiều sách cùng lúc.
+     *
+     * @param borrowIds Danh sách ID phiếu mượn cần trả
+     * @return Danh sách Borrow đã cập nhật (kèm fineAmount)
+     */
+    public List<Borrow> returnMultipleBooks(List<Integer> borrowIds) throws SQLException {
+        if (borrowIds == null || borrowIds.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn ít nhất một phiếu mượn.");
+        }
+
+        List<Borrow> results = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+
+        for (int borrowId : borrowIds) {
+            try {
+                Borrow b = returnBook(borrowId);
+                results.add(b);
+            } catch (Exception e) {
+                errors.add("Phiếu #" + borrowId + ": " + e.getMessage());
+            }
+        }
+
+        if (results.isEmpty() && !errors.isEmpty()) {
+            throw new SQLException("Không trả được sách nào:\n" + String.join("\n", errors));
+        }
+
+        return results;
     }
 
     // ===================== Gia hạn mượn sách =====================
@@ -340,6 +409,10 @@ public class BorrowService {
         return borrowDAO.findAll();
     }
 
+    public List<Borrow> getRecentBorrows(int limit) throws SQLException {
+        return borrowDAO.getRecentBorrows(limit);
+    }
+
     public List<Borrow> getActiveBorrows() throws SQLException {
         return borrowDAO.findActive();
     }
@@ -375,6 +448,21 @@ public class BorrowService {
     /** Đếm số phiếu đang hoạt động của một độc giả (dùng kiểm tra hạn mức mượn). */
     public int getActiveCountByReader(int readerId) throws SQLException {
         return borrowDAO.countActiveByReader(readerId);
+    }
+
+    /** Lấy phiếu mượn đang hoạt động theo mã thẻ độc giả (dùng cho Trả Nhanh). */
+    public List<Borrow> getActiveBorrowsByReaderCode(String readerCode) throws SQLException {
+        return borrowDAO.findActiveByReaderCode(readerCode);
+    }
+
+    /** Lấy phiếu mượn đang hoạt động của một độc giả (dùng cho Trả Nhanh). */
+    public List<Borrow> getActiveBorrowsByReader(int readerId) throws SQLException {
+        return borrowDAO.findActiveByReader(readerId);
+    }
+
+    /** Đếm số phiếu sắp hết hạn. */
+    public int getDueSoonCount() throws SQLException {
+        return borrowDAO.countDueSoon(DUE_SOON_DAYS);
     }
 
     public List<Object[]> getTopBorrowedBooks(int limit) throws SQLException {

@@ -1,21 +1,31 @@
 package com.example.view.panels;
 
+import com.example.model.Borrow;
 import com.example.service.BookService;
 import com.example.service.BorrowService;
 import com.example.service.ReaderService;
 import com.example.view.MainFrame;
 import com.example.view.SidebarPanel;
 import com.example.view.UITheme;
+import com.example.view.dialogs.BorrowDetailDialog;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Locale;
 
 /**
- * Panel Tổng Quan — hiển thị thống kê tổng hợp, quick actions, hoạt động gần đây.
- * v2.0 — Animated counters, glassmorphism welcome, quick action grid, recent activity.
+ * Panel Tổng Quan — Executive Library Dashboard.
+ * v2.5 — Animated Stat Cards, Compact Welcome Banner, Recent Borrow/Return Activity Table,
+ * Quick Action Grid, and Top Borrowed Books with visual progress ranking.
  */
 public class DashboardPanel extends JPanel implements MainFrame.Refreshable {
 
@@ -26,19 +36,35 @@ public class DashboardPanel extends JPanel implements MainFrame.Refreshable {
     private final MainFrame mainFrame;
     private JPanel statsRow;
 
+    // Recent activity table
+    private DefaultTableModel recentModel;
+    private JTable recentTable;
+    private JPanel recentCardBody;
+    private CardLayout recentCardLayout;
+    private JLabel lblRecentCount;
+
+    // Top books list
+    private JPanel topBooksContainer;
+
+    // Greeting labels
+    private JLabel lblGreetingTitle;
+    private JLabel lblGreetingSub;
+
+    private static final String[] RECENT_COLUMNS = {
+        "#", "Mã Phiếu", "Tên Sách", "Độc Giả", "Ngày Mượn", "Hạn Trả", "Trạng Thái"
+    };
+
     public DashboardPanel() {
         this(null);
     }
 
     public DashboardPanel(MainFrame mainFrame) {
         this.mainFrame = mainFrame;
-        setLayout(new BorderLayout(0, UITheme.PAD_LG));
+        setLayout(new BorderLayout(0, 0));
         setBackground(UITheme.BG_PRIMARY);
-        setBorder(new EmptyBorder(0, 0, 0, 0));
 
-        add(UITheme.createPageHeader("🏠  Tổng Quan",
-            "Thống kê tổng hợp hệ thống thư viện"), BorderLayout.NORTH);
-        add(buildContent(), BorderLayout.CENTER);
+        add(buildHeader(), BorderLayout.NORTH);
+        add(buildScrollableContent(), BorderLayout.CENTER);
 
         loadData();
     }
@@ -50,88 +76,363 @@ public class DashboardPanel extends JPanel implements MainFrame.Refreshable {
         return null;
     }
 
-    private JPanel buildContent() {
-        JPanel content = new JPanel(new BorderLayout(0, UITheme.PAD_LG));
+    private JPanel buildHeader() {
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(UITheme.BG_PRIMARY);
+        header.setBorder(new EmptyBorder(0, 0, UITheme.PAD_MD, 0));
+        header.add(UITheme.createPageHeader("🏠  Tổng Quan",
+            "Bảng điều khiển trung tâm & thống kê hoạt động thư viện"), BorderLayout.WEST);
+
+        JPanel rightTools = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        rightTools.setOpaque(false);
+
+        JButton btnRefresh = UITheme.createSecondaryButton("↺  Làm Mới");
+        btnRefresh.addActionListener(e -> loadData());
+        rightTools.add(btnRefresh);
+
+        header.add(rightTools, BorderLayout.EAST);
+        return header;
+    }
+
+    private JScrollPane buildScrollableContent() {
+        JPanel content = new JPanel(new BorderLayout(0, UITheme.PAD_MD));
         content.setBackground(UITheme.BG_PRIMARY);
 
-        // ---- Top: Stat cards ----
-        statsRow = new JPanel(new GridLayout(1, 4, UITheme.PAD_MD, 0));
-        statsRow.setBackground(UITheme.BG_PRIMARY);
-        statsRow.add(UITheme.createStatCard("Tổng Đầu Sách",  "...", UITheme.ACCENT_PRIMARY));
-        statsRow.add(UITheme.createStatCard("Đang Mượn",      "...", UITheme.COLOR_WARNING));
-        statsRow.add(UITheme.createStatCard("Độc Giả",        "...", UITheme.COLOR_SUCCESS));
-        statsRow.add(UITheme.createStatCard("Quá Hạn",        "...", UITheme.COLOR_DANGER));
+        // 1. Top: 4 Stat Cards
+        statsRow = buildStatCardsRow();
         content.add(statsRow, BorderLayout.NORTH);
 
-        // ---- Bottom area: Welcome + Quick Actions side by side ----
-        JPanel bottomArea = new JPanel(new GridLayout(1, 2, UITheme.PAD_MD, 0));
-        bottomArea.setBackground(UITheme.BG_PRIMARY);
-        bottomArea.add(buildWelcomeCard());
-        bottomArea.add(buildQuickActions());
-        content.add(bottomArea, BorderLayout.CENTER);
+        // 2. Main Area: 2 Columns (Left: flexible, Right: fixed 440px)
+        JPanel mainArea = new JPanel(new BorderLayout(UITheme.PAD_MD, 0));
+        mainArea.setBackground(UITheme.BG_PRIMARY);
 
-        return content;
+        mainArea.add(buildLeftColumn(),  BorderLayout.CENTER);
+        mainArea.add(buildRightColumn(), BorderLayout.EAST);
+
+        content.add(mainArea, BorderLayout.CENTER);
+
+        JScrollPane scroll = new JScrollPane(content);
+        scroll.setBorder(null);
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        return scroll;
     }
 
     // ================================================================
-    //  Welcome Card — Glassmorphism style
+    //  Stat Cards Row (4 cards)
     // ================================================================
 
-    private JPanel buildWelcomeCard() {
+    private JPanel buildStatCardsRow() {
+        JPanel row = new JPanel(new GridLayout(1, 4, UITheme.PAD_MD, 0));
+        row.setBackground(UITheme.BG_PRIMARY);
+
+        row.add(createClickableStatCard("Tổng Đầu Sách", "...", UITheme.ACCENT_PRIMARY,
+            () -> {
+                MainFrame mf = getMainFrame();
+                if (mf != null) mf.showPanel(SidebarPanel.MenuItem.BOOKS);
+            }));
+
+        row.add(createClickableStatCard("Đang Mượn", "...", UITheme.COLOR_WARNING,
+            () -> {
+                MainFrame mf = getMainFrame();
+                if (mf != null) mf.showPanel(SidebarPanel.MenuItem.BORROWS);
+            }));
+
+        row.add(createClickableStatCard("Độc Giả", "...", UITheme.COLOR_SUCCESS,
+            () -> {
+                MainFrame mf = getMainFrame();
+                if (mf != null) mf.showPanel(SidebarPanel.MenuItem.READERS);
+            }));
+
+        row.add(createClickableStatCard("Quá Hạn", "...", UITheme.COLOR_DANGER,
+            () -> {
+                MainFrame mf = getMainFrame();
+                if (mf != null) mf.showPanel(SidebarPanel.MenuItem.BORROWS);
+            }));
+
+        return row;
+    }
+
+    private JPanel createClickableStatCard(String title, String initialVal, Color accentColor, Runnable onClick) {
+        JPanel card = UITheme.createStatCard(title, initialVal, accentColor);
+        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        card.setToolTipText("Nhấp để chuyển đến danh mục " + title);
+        card.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                if (onClick != null) onClick.run();
+            }
+        });
+        return card;
+    }
+
+    // ================================================================
+    //  Left Column: Banner + Recent Borrows & Returns Table
+    // ================================================================
+
+    private JPanel buildLeftColumn() {
+        JPanel left = new JPanel(new BorderLayout(0, UITheme.PAD_MD));
+        left.setBackground(UITheme.BG_PRIMARY);
+
+        left.add(buildCompactWelcomeBanner(), BorderLayout.NORTH);
+        left.add(buildRecentActivityCard(),   BorderLayout.CENTER);
+
+        return left;
+    }
+
+    private JPanel buildCompactWelcomeBanner() {
         JPanel card = UITheme.createGlassCard();
-        card.setLayout(new BorderLayout(0, UITheme.PAD_MD));
+        card.setLayout(new BorderLayout(UITheme.PAD_MD, 0));
+        card.setBorder(BorderFactory.createCompoundBorder(
+            card.getBorder(),
+            new EmptyBorder(12, 16, 12, 16)
+        ));
 
-        // Top content
-        JPanel topContent = new JPanel(new BorderLayout(UITheme.PAD_MD, 0));
-        topContent.setOpaque(false);
+        // Left: Emoji + Texts
+        JPanel leftGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        leftGroup.setOpaque(false);
 
-        JLabel waveIcon = new JLabel("📖");
-        waveIcon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 42));
+        JLabel iconLbl = new JLabel("👋");
+        iconLbl.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 32));
+        leftGroup.add(iconLbl);
 
-        JPanel textPanel = new JPanel();
-        textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
-        textPanel.setOpaque(false);
+        JPanel textGroup = new JPanel();
+        textGroup.setLayout(new BoxLayout(textGroup, BoxLayout.Y_AXIS));
+        textGroup.setOpaque(false);
 
-        JLabel welcomeTitle = new JLabel("Chào mừng đến Thư Viện Nguyễn Huệ!");
-        welcomeTitle.setFont(UITheme.FONT_H2);
-        welcomeTitle.setForeground(UITheme.TEXT_PRIMARY);
+        lblGreetingTitle = new JLabel(getGreetingTime());
+        lblGreetingTitle.setFont(UITheme.FONT_H3);
+        lblGreetingTitle.setForeground(UITheme.TEXT_PRIMARY);
 
-        JLabel welcomeSub = new JLabel("Chọn chức năng từ menu bên trái để bắt đầu quản lý.");
-        welcomeSub.setFont(UITheme.FONT_BODY);
-        welcomeSub.setForeground(UITheme.TEXT_SECONDARY);
+        lblGreetingSub = new JLabel("Hôm nay là " + getFormattedToday() + ". Chúc bạn một ngày làm việc hiệu quả!");
+        lblGreetingSub.setFont(UITheme.FONT_SMALL);
+        lblGreetingSub.setForeground(UITheme.TEXT_SECONDARY);
 
-        textPanel.add(welcomeTitle);
-        textPanel.add(Box.createVerticalStrut(4));
-        textPanel.add(welcomeSub);
+        textGroup.add(lblGreetingTitle);
+        textGroup.add(Box.createVerticalStrut(2));
+        textGroup.add(lblGreetingSub);
+        leftGroup.add(textGroup);
 
-        topContent.add(waveIcon, BorderLayout.WEST);
-        topContent.add(textPanel, BorderLayout.CENTER);
+        card.add(leftGroup, BorderLayout.CENTER);
 
-        card.add(topContent, BorderLayout.NORTH);
+        // Right: Status Badges
+        JPanel rightBadges = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
+        rightBadges.setOpaque(false);
+        rightBadges.add(UITheme.createBadge("🟢 Hệ thống sẵn sàng", "success"));
+        rightBadges.add(UITheme.createBadge("v2.5", "info"));
+        card.add(rightBadges, BorderLayout.EAST);
 
-        // Info badges row
-        JPanel badgeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, UITheme.PAD_SM, 0));
-        badgeRow.setOpaque(false);
-        badgeRow.add(UITheme.createBadge("Hệ thống đang hoạt động", "success"));
-        badgeRow.add(UITheme.createBadge("v2.0", "info"));
-        card.add(badgeRow, BorderLayout.CENTER);
+        return card;
+    }
+
+    private String getGreetingTime() {
+        int hour = LocalTime.now().getHour();
+        if (hour >= 5 && hour < 12) {
+            return "Chào buổi sáng, Quản trị viên!";
+        } else if (hour >= 12 && hour < 18) {
+            return "Chào buổi chiều, Quản trị viên!";
+        } else {
+            return "Chào buổi tối, Quản trị viên!";
+        }
+    }
+
+    private String getFormattedToday() {
+        try {
+            LocalDate today = LocalDate.now();
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault());
+            return today.format(fmt);
+        } catch (Exception e) {
+            return "hôm nay";
+        }
+    }
+
+    private JPanel buildRecentActivityCard() {
+        JPanel card = UITheme.createCard();
+        card.setLayout(new BorderLayout(0, UITheme.PAD_SM));
+        card.setBorder(BorderFactory.createCompoundBorder(
+            card.getBorder(),
+            new EmptyBorder(14, 16, 14, 16)
+        ));
+
+        // Header
+        JPanel cardHeader = new JPanel(new BorderLayout());
+        cardHeader.setOpaque(false);
+
+        JPanel titlePanel = new JPanel();
+        titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.Y_AXIS));
+        titlePanel.setOpaque(false);
+
+        JPanel hRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        hRow.setOpaque(false);
+        JLabel titleLbl = new JLabel("📋  Hoạt Động Mượn / Trả Gần Đây");
+        titleLbl.setFont(UITheme.FONT_H3);
+        titleLbl.setForeground(UITheme.TEXT_PRIMARY);
+        lblRecentCount = UITheme.createBadge("0 giao dịch", "secondary");
+        hRow.add(titleLbl);
+        hRow.add(lblRecentCount);
+
+        JLabel subLbl = new JLabel("Danh sách các giao dịch mượn và trả sách mới nhất trong hệ thống");
+        subLbl.setFont(UITheme.FONT_SMALL);
+        subLbl.setForeground(UITheme.TEXT_MUTED);
+
+        titlePanel.add(hRow);
+        titlePanel.add(Box.createVerticalStrut(2));
+        titlePanel.add(subLbl);
+        cardHeader.add(titlePanel, BorderLayout.WEST);
+
+        JButton btnViewAll = UITheme.createSecondaryButton("Xem tất cả →");
+        btnViewAll.setFont(UITheme.FONT_SMALL);
+        btnViewAll.setPreferredSize(new Dimension(110, 30));
+        btnViewAll.addActionListener(e -> {
+            MainFrame mf = getMainFrame();
+            if (mf != null) mf.showPanel(SidebarPanel.MenuItem.BORROWS);
+        });
+        cardHeader.add(btnViewAll, BorderLayout.EAST);
+
+        card.add(cardHeader, BorderLayout.NORTH);
+
+        // Body: CardLayout ("table" or "empty")
+        recentCardLayout = new CardLayout();
+        recentCardBody   = new JPanel(recentCardLayout);
+        recentCardBody.setOpaque(false);
+
+        // 1. Table View
+        recentModel = new DefaultTableModel(RECENT_COLUMNS, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+        recentTable = new JTable(recentModel);
+        UITheme.styleTable(recentTable);
+        recentTable.setRowHeight(36);
+
+        // Column widths & Alignments
+        recentTable.getColumnModel().getColumn(0).setPreferredWidth(35);
+        recentTable.getColumnModel().getColumn(0).setMaxWidth(45);
+        recentTable.getColumnModel().getColumn(1).setPreferredWidth(65);
+        recentTable.getColumnModel().getColumn(1).setMaxWidth(80);
+        recentTable.getColumnModel().getColumn(2).setPreferredWidth(190);
+        recentTable.getColumnModel().getColumn(3).setPreferredWidth(120);
+        recentTable.getColumnModel().getColumn(4).setPreferredWidth(85);
+        recentTable.getColumnModel().getColumn(5).setPreferredWidth(85);
+        recentTable.getColumnModel().getColumn(6).setPreferredWidth(95);
+
+        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+        centerRenderer.setHorizontalAlignment(SwingConstants.CENTER);
+        recentTable.getColumnModel().getColumn(0).setCellRenderer(centerRenderer);
+        recentTable.getColumnModel().getColumn(1).setCellRenderer(centerRenderer);
+        recentTable.getColumnModel().getColumn(4).setCellRenderer(centerRenderer);
+        recentTable.getColumnModel().getColumn(5).setCellRenderer(centerRenderer);
+
+        // Status Badge Renderer
+        recentTable.getColumnModel().getColumn(6).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(
+                    JTable t, Object val, boolean sel, boolean foc, int row, int col) {
+                JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 4));
+                wrapper.setOpaque(true);
+                wrapper.setBackground(sel ? UITheme.TABLE_ROW_SELECTED
+                    : (row % 2 == 0 ? UITheme.TABLE_ROW_ODD : UITheme.TABLE_ROW_EVEN));
+
+                String s = val != null ? val.toString() : "";
+                JLabel badge;
+                if      (s.equals(Borrow.Status.RETURNED.getLabel())) badge = UITheme.createBadge(s, "success");
+                else if (s.equals(Borrow.Status.OVERDUE.getLabel()))  badge = UITheme.createBadge(s, "danger");
+                else if (s.equals(Borrow.Status.LOST.getLabel()))     badge = UITheme.createBadge(s, "warning");
+                else                                                  badge = UITheme.createBadge(s, "info");
+
+                wrapper.add(badge);
+                return wrapper;
+            }
+        });
+
+        // Double click to open BorrowDetailDialog
+        recentTable.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && recentTable.getSelectedRow() >= 0) {
+                    int modelRow = recentTable.convertRowIndexToModel(recentTable.getSelectedRow());
+                    Object idVal = recentModel.getValueAt(modelRow, 1);
+                    if (idVal != null) {
+                        try {
+                            int borrowId = Integer.parseInt(idVal.toString());
+                            BorrowDetailDialog dlg = new BorrowDetailDialog(
+                                SwingUtilities.getWindowAncestor(DashboardPanel.this), borrowId);
+                            dlg.setVisible(true);
+                            if (dlg.isChanged()) {
+                                loadData();
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+        });
+
+        JScrollPane tableScroll = UITheme.createTableScrollPane(recentTable);
+        tableScroll.setPreferredSize(new Dimension(0, 245));
+        recentCardBody.add(tableScroll, "table");
+
+        // 2. Empty View
+        JPanel emptyPanel = new JPanel();
+        emptyPanel.setLayout(new BoxLayout(emptyPanel, BoxLayout.Y_AXIS));
+        emptyPanel.setOpaque(false);
+        emptyPanel.setBorder(new EmptyBorder(30, 20, 30, 20));
+
+        JLabel emptyIcon = new JLabel("📖");
+        emptyIcon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 40));
+        emptyIcon.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel emptyMsg = new JLabel("Chưa có giao dịch mượn trả nào gần đây.");
+        emptyMsg.setFont(UITheme.FONT_BOLD);
+        emptyMsg.setForeground(UITheme.TEXT_SECONDARY);
+        emptyMsg.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel emptySub = new JLabel("Bấm nút 'Mượn Sách' ở bảng bên phải để tạo phiếu mượn đầu tiên.");
+        emptySub.setFont(UITheme.FONT_SMALL);
+        emptySub.setForeground(UITheme.TEXT_MUTED);
+        emptySub.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        emptyPanel.add(emptyIcon);
+        emptyPanel.add(Box.createVerticalStrut(8));
+        emptyPanel.add(emptyMsg);
+        emptyPanel.add(Box.createVerticalStrut(4));
+        emptyPanel.add(emptySub);
+
+        recentCardBody.add(emptyPanel, "empty");
+
+        card.add(recentCardBody, BorderLayout.CENTER);
+
+        // Footer hint
+        JLabel footerHint = new JLabel("💡 Nhấp đúp chuột vào bất kỳ dòng nào để xem chi tiết và xử lý phiếu mượn");
+        footerHint.setFont(UITheme.FONT_SMALL);
+        footerHint.setForeground(UITheme.TEXT_MUTED);
+        card.add(footerHint, BorderLayout.SOUTH);
 
         return card;
     }
 
     // ================================================================
-    //  Quick Actions — 4 nút lớn có phản hồi click & điều hướng
+    //  Right Column: Quick Actions + Top Borrowed Books
     // ================================================================
+
+    private JPanel buildRightColumn() {
+        JPanel right = new JPanel(new BorderLayout(0, UITheme.PAD_MD));
+        right.setBackground(UITheme.BG_PRIMARY);
+        right.setPreferredSize(new Dimension(440, 0));
+
+        right.add(buildQuickActions(),  BorderLayout.NORTH);
+        right.add(buildTopBooksCard(),  BorderLayout.CENTER);
+
+        return right;
+    }
 
     private JPanel buildQuickActions() {
         JPanel card = UITheme.createCard();
-        card.setLayout(new BorderLayout(0, UITheme.PAD_MD));
+        card.setLayout(new BorderLayout(0, UITheme.PAD_SM));
         card.setBorder(BorderFactory.createCompoundBorder(
             card.getBorder(),
-            new EmptyBorder(UITheme.PAD_LG, UITheme.PAD_LG, UITheme.PAD_LG, UITheme.PAD_LG)
+            new EmptyBorder(14, 16, 14, 16)
         ));
 
-        // Header thao tác nhanh (dùng VectorIcon tránh lỗi hiển thị font)
+        // Title row
         JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         titleRow.setOpaque(false);
 
@@ -146,7 +447,7 @@ public class DashboardPanel extends JPanel implements MainFrame.Refreshable {
         titleRow.add(title);
         card.add(titleRow, BorderLayout.NORTH);
 
-        JPanel grid = new JPanel(new GridLayout(2, 2, UITheme.PAD_MD, UITheme.PAD_MD));
+        JPanel grid = new JPanel(new GridLayout(2, 2, 10, 10));
         grid.setOpaque(false);
 
         // 1. Thêm Sách
@@ -213,7 +514,7 @@ public class DashboardPanel extends JPanel implements MainFrame.Refreshable {
             Color gradTo,
             Runnable onClickAction) {
 
-        JPanel btn = new JPanel(new BorderLayout(14, 0)) {
+        JPanel btn = new JPanel(new BorderLayout(10, 0)) {
             private boolean hovered = false;
             private boolean pressed = false;
             {
@@ -240,17 +541,17 @@ public class DashboardPanel extends JPanel implements MainFrame.Refreshable {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
                 int w = getWidth(), h = getHeight();
-                int arc = 14;
+                int arc = 12;
 
                 // Gradient background
                 g2.setPaint(new GradientPaint(0, 0, gradFrom, w, h, gradTo));
                 g2.fillRoundRect(0, 0, w, h, arc, arc);
 
-                // Subtle inner border
+                // Inner subtle outline
                 g2.setColor(new Color(255, 255, 255, 35));
                 g2.drawRoundRect(0, 0, w - 1, h - 1, arc, arc);
 
-                // Hover overlay
+                // Hover / Pressed overlay
                 if (hovered && !pressed) {
                     g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f));
                     g2.setColor(Color.WHITE);
@@ -264,102 +565,309 @@ public class DashboardPanel extends JPanel implements MainFrame.Refreshable {
             }
         };
         btn.setOpaque(false);
-        btn.setBorder(new EmptyBorder(14, 18, 14, 18));
-        btn.setPreferredSize(new Dimension(160, 75));
+        btn.setBorder(new EmptyBorder(10, 14, 10, 14));
+        btn.setPreferredSize(new Dimension(160, 68));
 
-        // Icon badge on WEST
+        // Icon badge
         JPanel iconBadge = new JPanel(new GridBagLayout()) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(new Color(255, 255, 255, 45));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
                 g2.dispose();
             }
         };
         iconBadge.setOpaque(false);
-        iconBadge.setPreferredSize(new Dimension(42, 42));
+        iconBadge.setPreferredSize(new Dimension(36, 36));
         JLabel iconLbl = new JLabel();
-        iconLbl.setIcon(new UITheme.VectorIcon(iconType, 20, Color.WHITE));
+        iconLbl.setIcon(new UITheme.VectorIcon(iconType, 18, Color.WHITE));
         iconBadge.add(iconLbl);
         btn.add(iconBadge, BorderLayout.WEST);
 
-        // Text in CENTER
+        // Text
         JPanel textPanel = new JPanel();
         textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
         textPanel.setOpaque(false);
 
         JLabel lblTitle = new JLabel(label);
-        lblTitle.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 14));
+        lblTitle.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 13));
         lblTitle.setForeground(Color.WHITE);
 
         JLabel lblSub = new JLabel(subtitle);
-        lblSub.setFont(new Font(UITheme.FONT_NAME, Font.PLAIN, 11));
+        lblSub.setFont(new Font(UITheme.FONT_NAME, Font.PLAIN, 10));
         lblSub.setForeground(new Color(255, 255, 255, 210));
 
         textPanel.add(Box.createVerticalGlue());
         textPanel.add(lblTitle);
-        textPanel.add(Box.createVerticalStrut(3));
+        textPanel.add(Box.createVerticalStrut(2));
         textPanel.add(lblSub);
         textPanel.add(Box.createVerticalGlue());
-
         btn.add(textPanel, BorderLayout.CENTER);
 
-        // Arrow on EAST
+        // Small arrow on EAST
         JLabel arrowLbl = new JLabel("→");
-        arrowLbl.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 16));
+        arrowLbl.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 14));
         arrowLbl.setForeground(new Color(255, 255, 255, 160));
         btn.add(arrowLbl, BorderLayout.EAST);
 
         return btn;
     }
 
+    private JPanel buildTopBooksCard() {
+        JPanel card = UITheme.createCard();
+        card.setLayout(new BorderLayout(0, UITheme.PAD_SM));
+        card.setBorder(BorderFactory.createCompoundBorder(
+            card.getBorder(),
+            new EmptyBorder(14, 16, 14, 16)
+        ));
+
+        // Header
+        JPanel cardHeader = new JPanel(new BorderLayout());
+        cardHeader.setOpaque(false);
+
+        JPanel titlePanel = new JPanel();
+        titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.Y_AXIS));
+        titlePanel.setOpaque(false);
+
+        JLabel titleLbl = new JLabel("🔥  Sách Mượn Nhiều Nhất");
+        titleLbl.setFont(UITheme.FONT_H3);
+        titleLbl.setForeground(UITheme.TEXT_PRIMARY);
+
+        JLabel subLbl = new JLabel("Bảng xếp hạng sách được yêu thích nhất");
+        subLbl.setFont(UITheme.FONT_SMALL);
+        subLbl.setForeground(UITheme.TEXT_MUTED);
+
+        titlePanel.add(titleLbl);
+        titlePanel.add(Box.createVerticalStrut(2));
+        titlePanel.add(subLbl);
+        cardHeader.add(titlePanel, BorderLayout.WEST);
+
+        JButton btnDetail = UITheme.createSecondaryButton("Báo cáo →");
+        btnDetail.setFont(UITheme.FONT_SMALL);
+        btnDetail.setPreferredSize(new Dimension(90, 28));
+        btnDetail.addActionListener(e -> {
+            MainFrame mf = getMainFrame();
+            if (mf != null) mf.showPanel(SidebarPanel.MenuItem.REPORT);
+        });
+        cardHeader.add(btnDetail, BorderLayout.EAST);
+
+        card.add(cardHeader, BorderLayout.NORTH);
+
+        // List container
+        topBooksContainer = new JPanel();
+        topBooksContainer.setLayout(new BoxLayout(topBooksContainer, BoxLayout.Y_AXIS));
+        topBooksContainer.setOpaque(false);
+
+        card.add(topBooksContainer, BorderLayout.CENTER);
+        return card;
+    }
+
     // ================================================================
-    //  Load Data — với animated counters
+    //  Load Data — SwingWorker
     // ================================================================
+
+    private static class DashboardData {
+        int totalBooks;
+        int totalBorrowed;
+        int totalReaders;
+        int overdueBorrows;
+        List<Borrow> recentBorrows;
+        List<Object[]> topBooks;
+    }
 
     private void loadData() {
-        SwingWorker<int[], Void> worker = new SwingWorker<>() {
-            @Override protected int[] doInBackground() throws Exception {
-                return new int[]{
-                    bookService.getTotalBooks(),
-                    bookService.getTotalBorrowed(),
-                    readerService.getTotalReaders(),
-                    borrowService.getOverdueBorrowCount()
-                };
+        SwingWorker<DashboardData, Void> worker = new SwingWorker<>() {
+            @Override
+            protected DashboardData doInBackground() throws Exception {
+                DashboardData data = new DashboardData();
+                data.totalBooks     = bookService.getTotalBooks();
+                data.totalBorrowed  = bookService.getTotalBorrowed();
+                data.totalReaders   = readerService.getTotalReaders();
+                data.overdueBorrows = borrowService.getOverdueBorrowCount();
+                data.recentBorrows  = borrowService.getRecentBorrows(6);
+                data.topBooks       = borrowService.getTopBorrowedBooks(4);
+                return data;
             }
-            @Override protected void done() {
+
+            @Override
+            protected void done() {
                 try {
-                    int[] data = get();
-                    String[] titles = {"Tổng Đầu Sách","Đang Mượn","Độc Giả","Quá Hạn"};
-                    Color[] colors = {
-                        UITheme.ACCENT_PRIMARY, UITheme.COLOR_WARNING,
-                        UITheme.COLOR_SUCCESS,  UITheme.COLOR_DANGER
-                    };
+                    DashboardData data = get();
 
-                    statsRow.removeAll();
-                    for (int i = 0; i < 4; i++) {
-                        JPanel card = UITheme.createStatCard(titles[i], "0", colors[i]);
-                        statsRow.add(card);
+                    // 1. Animate Stat Cards
+                    updateStatCards(data);
 
-                        // Find the value label and animate it
-                        final int targetValue = data[i];
-                        SwingUtilities.invokeLater(() -> {
-                            JLabel valueLbl = findValueLabel(card);
-                            if (valueLbl != null) {
-                                UITheme.animateValue(valueLbl, targetValue, 800);
-                            }
-                        });
+                    // 2. Populate Recent Activity Table
+                    updateRecentTable(data.recentBorrows);
+
+                    // 3. Populate Top Books List
+                    updateTopBooks(data.topBooks);
+
+                    // 4. Update Greeting Subtitle with quick count
+                    if (lblGreetingSub != null) {
+                        lblGreetingSub.setText("Hôm nay là " + getFormattedToday()
+                            + " • Thư viện đang lưu hành " + data.totalBorrowed + " cuốn sách"
+                            + (data.overdueBorrows > 0 ? " (⚠ " + data.overdueBorrows + " quá hạn)" : "") + ".");
                     }
-                    statsRow.revalidate();
-                    statsRow.repaint();
+
                 } catch (Exception ignored) {}
             }
         };
         worker.execute();
     }
 
-    /** Tìm JLabel giá trị lớn trong stat card. */
+    private void updateStatCards(DashboardData data) {
+        if (statsRow == null) return;
+        int[] values = {
+            data.totalBooks,
+            data.totalBorrowed,
+            data.totalReaders,
+            data.overdueBorrows
+        };
+
+        Component[] cards = statsRow.getComponents();
+        for (int i = 0; i < cards.length && i < values.length; i++) {
+            if (cards[i] instanceof Container container) {
+                JLabel valLbl = findValueLabel(container);
+                if (valLbl != null) {
+                    UITheme.animateValue(valLbl, values[i], 750);
+                }
+            }
+        }
+    }
+
+    private void updateRecentTable(List<Borrow> borrows) {
+        recentModel.setRowCount(0);
+
+        if (borrows == null || borrows.isEmpty()) {
+            recentCardLayout.show(recentCardBody, "empty");
+            lblRecentCount.setText("0 giao dịch");
+            return;
+        }
+
+        recentCardLayout.show(recentCardBody, "table");
+        lblRecentCount.setText(borrows.size() + " mới nhất");
+
+        int idx = 1;
+        for (Borrow b : borrows) {
+            recentModel.addRow(new Object[]{
+                idx++,
+                b.getId(),
+                b.getBookTitle(),
+                b.getReaderName(),
+                b.getBorrowDate(),
+                b.getDueDate(),
+                b.getStatus().getLabel()
+            });
+        }
+    }
+
+    private void updateTopBooks(List<Object[]> topBooks) {
+        topBooksContainer.removeAll();
+
+        if (topBooks == null || topBooks.isEmpty()) {
+            JPanel p = new JPanel();
+            p.setOpaque(false);
+            p.setBorder(new EmptyBorder(20, 10, 20, 10));
+            JLabel empty = new JLabel("Chưa có đủ số liệu thống kê mượn sách.");
+            empty.setFont(UITheme.FONT_SMALL);
+            empty.setForeground(UITheme.TEXT_MUTED);
+            p.add(empty);
+            topBooksContainer.add(p);
+            topBooksContainer.revalidate();
+            topBooksContainer.repaint();
+            return;
+        }
+
+        int maxCount = 1;
+        for (Object[] row : topBooks) {
+            int cnt = ((Number) row[1]).intValue();
+            if (cnt > maxCount) maxCount = cnt;
+        }
+
+        String[] medals = {"🥇", "🥈", "🥉", "4.", "5."};
+        Color[] medalColors = {
+            new Color(0xD97706), // Amber gold
+            new Color(0x64748B), // Slate silver
+            new Color(0xB45309), // Bronze
+            UITheme.TEXT_MUTED,
+            UITheme.TEXT_MUTED
+        };
+
+        for (int i = 0; i < topBooks.size(); i++) {
+            Object[] row = topBooks.get(i);
+            String title = (String) row[0];
+            int count = ((Number) row[1]).intValue();
+
+            JPanel itemRow = new JPanel(new BorderLayout(8, 0));
+            itemRow.setOpaque(false);
+            itemRow.setBorder(new EmptyBorder(6, 0, 6, 0));
+
+            // Rank Badge
+            JLabel rankLbl = new JLabel(i < medals.length ? medals[i] : (i + 1) + ".");
+            rankLbl.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 13));
+            rankLbl.setForeground(i < medalColors.length ? medalColors[i] : UITheme.TEXT_MUTED);
+            rankLbl.setPreferredSize(new Dimension(28, 20));
+            itemRow.add(rankLbl, BorderLayout.WEST);
+
+            // Center: Title + Progress bar
+            JPanel center = new JPanel();
+            center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+            center.setOpaque(false);
+
+            JLabel lblTitle = new JLabel(title);
+            lblTitle.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 12));
+            lblTitle.setForeground(UITheme.TEXT_PRIMARY);
+            lblTitle.setToolTipText(title);
+
+            // Visual sleek progress bar
+            final float ratio = (float) count / maxCount;
+            JPanel progressBar = new JPanel() {
+                @Override protected void paintComponent(Graphics g) {
+                    super.paintComponent(g);
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    int w = getWidth(), h = getHeight();
+
+                    // Track
+                    g2.setColor(new Color(0xE2E8F0));
+                    g2.fillRoundRect(0, 0, w, h, h, h);
+
+                    // Fill
+                    int fillW = Math.max(8, (int) (w * ratio));
+                    g2.setPaint(new GradientPaint(0, 0, UITheme.ACCENT_PRIMARY, fillW, 0, new Color(0x38BDF8)));
+                    g2.fillRoundRect(0, 0, fillW, h, h, h);
+                    g2.dispose();
+                }
+            };
+            progressBar.setOpaque(false);
+            progressBar.setPreferredSize(new Dimension(0, 6));
+            progressBar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 6));
+
+            center.add(lblTitle);
+            center.add(Box.createVerticalStrut(4));
+            center.add(progressBar);
+            itemRow.add(center, BorderLayout.CENTER);
+
+            // Right: Count badge
+            JLabel countLbl = new JLabel(count + " lượt");
+            countLbl.setFont(new Font(UITheme.FONT_NAME, Font.BOLD, 11));
+            countLbl.setForeground(UITheme.ACCENT_PRIMARY);
+            countLbl.setBorder(new EmptyBorder(0, 6, 0, 0));
+            itemRow.add(countLbl, BorderLayout.EAST);
+
+            topBooksContainer.add(itemRow);
+
+            if (i < topBooks.size() - 1) {
+                topBooksContainer.add(Box.createVerticalStrut(2));
+            }
+        }
+
+        topBooksContainer.revalidate();
+        topBooksContainer.repaint();
+    }
+
     private JLabel findValueLabel(Container container) {
         for (Component c : container.getComponents()) {
             if (c instanceof JLabel lbl) {
@@ -375,5 +883,8 @@ public class DashboardPanel extends JPanel implements MainFrame.Refreshable {
         return null;
     }
 
-    @Override public void refresh() { loadData(); }
+    @Override
+    public void refresh() {
+        loadData();
+    }
 }
