@@ -172,7 +172,7 @@ public class BorrowDAO {
     // ===================== Xóa phiếu mượn =====================
 
     public boolean delete(int id) throws SQLException {
-        String sql = "DELETE FROM borrows WHERE id = ?";
+        String sql = "UPDATE borrows SET deleted_at=datetime('now','localtime') WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, id);
             return ps.executeUpdate() > 0;
@@ -201,7 +201,7 @@ public class BorrowDAO {
 
     /** Tìm phiếu mượn theo id. */
     public Borrow findById(int id) throws SQLException {
-        String sql = SELECT_WITH_JOIN + " WHERE b.id = ?";
+        String sql = SELECT_WITH_JOIN + " WHERE b.deleted_at IS NULL AND b.id = ?";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, id);
             ResultSet rs = ps.executeQuery();
@@ -213,7 +213,7 @@ public class BorrowDAO {
     /** Lấy phiếu mượn đang hoạt động (BORROWING + OVERDUE). */
     public List<Borrow> findActive() throws SQLException {
         String sql = SELECT_WITH_JOIN +
-                     " WHERE b.status IN ('BORROWING','OVERDUE') ORDER BY b.due_date";
+                     " WHERE b.deleted_at IS NULL AND b.status IN ('BORROWING','OVERDUE') ORDER BY b.due_date";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return mapList(rs);
@@ -222,7 +222,7 @@ public class BorrowDAO {
 
     /** Lấy danh sách quá hạn. */
     public List<Borrow> findOverdue() throws SQLException {
-        String sql = SELECT_WITH_JOIN + " WHERE b.status = 'OVERDUE' ORDER BY b.due_date";
+        String sql = SELECT_WITH_JOIN + " WHERE b.deleted_at IS NULL AND b.status = 'OVERDUE' ORDER BY b.due_date";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return mapList(rs);
@@ -231,7 +231,7 @@ public class BorrowDAO {
 
     /** Lấy danh sách phiếu mượn bị mất sách. */
     public List<Borrow> findLost() throws SQLException {
-        String sql = SELECT_WITH_JOIN + " WHERE b.status = 'LOST' ORDER BY b.id DESC";
+        String sql = SELECT_WITH_JOIN + " WHERE b.deleted_at IS NULL AND b.status = 'LOST' ORDER BY b.id DESC";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return mapList(rs);
@@ -240,7 +240,7 @@ public class BorrowDAO {
 
     /** Lấy lịch sử mượn của một độc giả. */
     public List<Borrow> findByReader(int readerId) throws SQLException {
-        String sql = SELECT_WITH_JOIN + " WHERE b.reader_id = ? ORDER BY b.id DESC";
+        String sql = SELECT_WITH_JOIN + " WHERE b.deleted_at IS NULL AND b.reader_id = ? ORDER BY b.id DESC";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, readerId);
             return mapList(ps.executeQuery());
@@ -250,7 +250,7 @@ public class BorrowDAO {
     /** Lấy phiếu mượn đang hoạt động của một độc giả (chưa trả). */
     public List<Borrow> findActiveByReader(int readerId) throws SQLException {
         String sql = SELECT_WITH_JOIN +
-                     " WHERE b.reader_id = ? AND b.status IN ('BORROWING','OVERDUE') ORDER BY b.due_date";
+                     " WHERE b.deleted_at IS NULL AND b.reader_id = ? AND b.status IN ('BORROWING','OVERDUE') ORDER BY b.due_date";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, readerId);
             return mapList(ps.executeQuery());
@@ -260,7 +260,7 @@ public class BorrowDAO {
     /** Tìm phiếu mượn đang hoạt động theo mã thẻ độc giả. */
     public List<Borrow> findActiveByReaderCode(String readerCode) throws SQLException {
         String sql = SELECT_WITH_JOIN +
-                     " WHERE r.reader_code = ? AND b.status IN ('BORROWING','OVERDUE') ORDER BY b.due_date";
+                     " WHERE b.deleted_at IS NULL AND r.reader_code = ? AND b.status IN ('BORROWING','OVERDUE') ORDER BY b.due_date";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, readerCode.trim());
             return mapList(ps.executeQuery());
@@ -269,7 +269,7 @@ public class BorrowDAO {
 
     /** Lấy lịch sử mượn của một cuốn sách. */
     public List<Borrow> findByBook(int bookId) throws SQLException {
-        String sql = SELECT_WITH_JOIN + " WHERE b.book_id = ? ORDER BY b.id DESC";
+        String sql = SELECT_WITH_JOIN + " WHERE b.deleted_at IS NULL AND b.book_id = ? ORDER BY b.id DESC";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, bookId);
             return mapList(ps.executeQuery());
@@ -280,8 +280,9 @@ public class BorrowDAO {
     public List<Borrow> search(String keyword) throws SQLException {
         if (keyword == null || keyword.isBlank()) return findAll();
         String sql = SELECT_WITH_JOIN + """
-                     WHERE bk.title      LIKE ? OR r.full_name  LIKE ?
+                     WHERE b.deleted_at IS NULL AND (bk.title      LIKE ? OR r.full_name  LIKE ?
                         OR r.reader_code LIKE ? OR bk.isbn      LIKE ?
+                     )
                      ORDER BY b.id DESC
                      """;
         String like = "%" + keyword.trim() + "%";
@@ -294,7 +295,7 @@ public class BorrowDAO {
     /** Tìm kiếm nâng cao kết hợp nhiều tiêu chí. */
     public List<Borrow> advancedSearch(String keyword, String fromDate, String toDate, Borrow.Status status) throws SQLException {
         StringBuilder sql = new StringBuilder(SELECT_WITH_JOIN);
-        sql.append(" WHERE 1=1 ");
+        sql.append(" WHERE b.deleted_at IS NULL ");
         List<Object> params = new ArrayList<>();
 
         if (keyword != null && !keyword.isBlank()) {

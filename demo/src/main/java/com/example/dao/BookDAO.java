@@ -134,7 +134,7 @@ public class BookDAO {
      * Xóa sách theo id. Chú ý: chỉ xóa được nếu không còn phiếu mượn đang hoạt động.
      */
     public boolean delete(int id) throws SQLException {
-        String sql = "DELETE FROM books WHERE id = ?";
+        String sql = "UPDATE books SET deleted_at=datetime('now','localtime') WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, id);
             return ps.executeUpdate() > 0;
@@ -145,7 +145,7 @@ public class BookDAO {
 
     /** Lấy toàn bộ danh sách sách, sắp xếp theo tên. */
     public List<Book> findAll() throws SQLException {
-        String sql = "SELECT * FROM books ORDER BY title";
+        String sql = "SELECT * FROM books WHERE deleted_at IS NULL ORDER BY title";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return mapList(rs);
@@ -154,7 +154,7 @@ public class BookDAO {
 
     /** Tìm sách theo id. */
     public Book findById(int id) throws SQLException {
-        String sql = "SELECT * FROM books WHERE id = ?";
+        String sql = "SELECT * FROM books WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, id);
             ResultSet rs = ps.executeQuery();
@@ -164,7 +164,7 @@ public class BookDAO {
 
     /** Tìm sách theo ISBN. */
     public Book findByIsbn(String isbn) throws SQLException {
-        String sql = "SELECT * FROM books WHERE isbn = ?";
+        String sql = "SELECT * FROM books WHERE isbn = ? AND deleted_at IS NULL";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, isbn);
             ResultSet rs = ps.executeQuery();
@@ -182,9 +182,9 @@ public class BookDAO {
         }
         String sql = """
                 SELECT * FROM books
-                WHERE title    LIKE ? OR author   LIKE ?
+                WHERE deleted_at IS NULL AND (title    LIKE ? OR author   LIKE ?
                    OR category LIKE ? OR isbn     LIKE ?
-                   OR publisher LIKE ?
+                   OR publisher LIKE ?)
                 ORDER BY title
                 """;
         String like = "%" + keyword.trim() + "%";
@@ -198,7 +198,7 @@ public class BookDAO {
      * Tìm kiếm nâng cao kết hợp nhiều tiêu chí.
      */
     public List<Book> advancedSearch(String keyword, String category, String author, Integer publishYear, Boolean isAvailable) throws SQLException {
-        StringBuilder sql = new StringBuilder("SELECT * FROM books WHERE 1=1 ");
+        StringBuilder sql = new StringBuilder("SELECT * FROM books WHERE deleted_at IS NULL ");
         List<Object> params = new ArrayList<>();
 
         if (keyword != null && !keyword.isBlank()) {
@@ -246,7 +246,7 @@ public class BookDAO {
      * Tìm kiếm theo thể loại cụ thể.
      */
     public List<Book> findByCategory(String category) throws SQLException {
-        String sql = "SELECT * FROM books WHERE category = ? ORDER BY title";
+        String sql = "SELECT * FROM books WHERE deleted_at IS NULL AND category = ? ORDER BY title";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, category);
             return mapList(ps.executeQuery());
@@ -255,7 +255,7 @@ public class BookDAO {
 
     /** Lấy danh sách tất cả thể loại (distinct). */
     public List<String> findAllCategories() throws SQLException {
-        String sql = "SELECT DISTINCT category FROM books WHERE category IS NOT NULL ORDER BY category";
+        String sql = "SELECT DISTINCT category FROM books WHERE deleted_at IS NULL AND category IS NOT NULL ORDER BY category";
         List<String> list = new ArrayList<>();
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
@@ -266,7 +266,7 @@ public class BookDAO {
 
     /** Tổng số đầu sách. */
     public int countAll() throws SQLException {
-        String sql = "SELECT COUNT(*) FROM books";
+        String sql = "SELECT COUNT(*) FROM books WHERE deleted_at IS NULL";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return rs.next() ? rs.getInt(1) : 0;
@@ -275,7 +275,7 @@ public class BookDAO {
 
     /** Số sách đang được mượn (available_copies < total_copies). */
     public int countBorrowed() throws SQLException {
-        String sql = "SELECT SUM(total_copies - available_copies) FROM books";
+        String sql = "SELECT SUM(total_copies - available_copies) FROM books WHERE deleted_at IS NULL";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return rs.next() ? rs.getInt(1) : 0;
@@ -294,6 +294,7 @@ public class BookDAO {
                     SUM(total_copies) AS sum_total_copies,
                     SUM(available_copies) AS sum_available_copies
                 FROM books
+                WHERE deleted_at IS NULL
                 GROUP BY cat_name
                 ORDER BY title_count DESC, sum_total_copies DESC
                 """;

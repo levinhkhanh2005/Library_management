@@ -159,6 +159,37 @@ public class DatabaseInitializer {
             )
             """;
 
+    private static final String CREATE_TABLE_INVENTORY_LOGS = """
+            CREATE TABLE IF NOT EXISTS inventory_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                book_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                reason TEXT,
+                user_id INTEGER,
+                user_name TEXT,
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (book_id) REFERENCES books(id)
+            )
+            """;
+
+    private static final String CREATE_TABLE_FINE_TRANSACTIONS = """
+            CREATE TABLE IF NOT EXISTS fine_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                borrow_id INTEGER NOT NULL,
+                reader_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                type TEXT NOT NULL DEFAULT 'CHARGE',
+                reason TEXT,
+                user_id INTEGER,
+                user_name TEXT,
+                receipt_no TEXT UNIQUE,
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (borrow_id) REFERENCES borrows(id),
+                FOREIGN KEY (reader_id) REFERENCES readers(id)
+            )
+            """;
+
     // ============================================================
     //  Index để tăng tốc truy vấn
     // ============================================================
@@ -178,7 +209,10 @@ public class DatabaseInitializer {
         "CREATE INDEX IF NOT EXISTS idx_login_logs_action    ON login_logs(action)",
         "CREATE INDEX IF NOT EXISTS idx_otp_email_type       ON otp_verifications(email, type)",
         "CREATE INDEX IF NOT EXISTS idx_users_email          ON users(email)",
-        "CREATE INDEX IF NOT EXISTS idx_users_reader_id      ON users(reader_id)"
+        "CREATE INDEX IF NOT EXISTS idx_users_reader_id      ON users(reader_id)",
+        "CREATE INDEX IF NOT EXISTS idx_inventory_logs_book  ON inventory_logs(book_id)",
+        "CREATE INDEX IF NOT EXISTS idx_inventory_logs_date  ON inventory_logs(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_fine_transactions_borrow ON fine_transactions(borrow_id)"
     };
 
     // ============================================================
@@ -325,6 +359,8 @@ public class DatabaseInitializer {
             stmt.execute(CREATE_TABLE_PUBLISHERS);
             stmt.execute(CREATE_TABLE_LOGIN_LOGS);
             stmt.execute(CREATE_TABLE_OTP_VERIFICATIONS);
+            stmt.execute(CREATE_TABLE_INVENTORY_LOGS);
+            stmt.execute(CREATE_TABLE_FINE_TRANSACTIONS);
 
             // Migration: thêm cột renew_count nếu DB đã tồn tại từ phiên bản trước
             try {
@@ -346,6 +382,14 @@ public class DatabaseInitializer {
             } catch (SQLException ignored) {
                 // Cột đã tồn tại
             }
+
+            // Soft-delete để bảo toàn lịch sử sách, độc giả và phiếu mượn.
+            try { stmt.execute("ALTER TABLE books ADD COLUMN deleted_at TEXT"); } catch (SQLException ignored) {}
+            try { stmt.execute("ALTER TABLE readers ADD COLUMN deleted_at TEXT"); } catch (SQLException ignored) {}
+            try { stmt.execute("ALTER TABLE borrows ADD COLUMN deleted_at TEXT"); } catch (SQLException ignored) {}
+            try { stmt.execute("ALTER TABLE books ADD COLUMN deleted_by INTEGER"); } catch (SQLException ignored) {}
+            try { stmt.execute("ALTER TABLE readers ADD COLUMN deleted_by INTEGER"); } catch (SQLException ignored) {}
+            try { stmt.execute("ALTER TABLE borrows ADD COLUMN deleted_by INTEGER"); } catch (SQLException ignored) {}
 
             // Migration: đồng bộ các thể loại hiện có trong bảng books vào bảng categories nếu chưa có
             try {

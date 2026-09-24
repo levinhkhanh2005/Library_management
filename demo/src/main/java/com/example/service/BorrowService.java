@@ -7,6 +7,10 @@ import com.example.model.Book;
 import com.example.model.Borrow;
 import com.example.model.BorrowStats;
 import com.example.model.Reader;
+import com.example.model.FineTransaction;
+import com.example.model.User;
+import com.example.dao.FineTransactionDAO;
+import com.example.dao.SystemSettingDAO;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -52,6 +56,8 @@ public class BorrowService {
     private final BorrowDAO  borrowDAO  = new BorrowDAO();
     private final BookDAO    bookDAO    = new BookDAO();
     private final ReaderDAO  readerDAO  = new ReaderDAO();
+    private final SystemSettingDAO settingDAO = new SystemSettingDAO();
+    private final FineTransactionDAO fineTransactionDAO = new FineTransactionDAO();
 
     // ===================== Mượn sách =====================
 
@@ -82,10 +88,10 @@ public class BorrowService {
 
         // 3. Kiểm tra số sách đang mượn chưa vượt quá giới hạn
         int activeCount = borrowDAO.countActiveByReader(readerId);
-        if (activeCount >= MAX_CONCURRENT_BORROWS) {
+        if (activeCount >= getMaxConcurrentBorrows()) {
             throw new IllegalStateException(
                 "Độc giả \"" + reader.getFullName() + "\" đã đạt giới hạn mượn " +
-                MAX_CONCURRENT_BORROWS + " cuốn sách cùng lúc.");
+                getMaxConcurrentBorrows() + " cuốn sách cùng lúc.");
         }
 
         // 4. Kiểm tra chưa mượn cuốn đó
@@ -99,7 +105,7 @@ public class BorrowService {
         String today   = LocalDate.now().format(DATE_FMT);
         String dueDate = (dueDateStr != null && !dueDateStr.isBlank())
             ? dueDateStr.trim()
-            : LocalDate.now().plusDays(DEFAULT_BORROW_DAYS).format(DATE_FMT);
+            : LocalDate.now().plusDays(getBorrowDays()).format(DATE_FMT);
 
         // Validate due_date phải sau today
         LocalDate due = LocalDate.parse(dueDate, DATE_FMT);
@@ -193,6 +199,14 @@ public class BorrowService {
         try {
             conn.setAutoCommit(false);
             borrowDAO.returnBook(borrowId, today, status, fine);
+            if (fine > 0) {
+                User user = AuthService.getCurrentUser();
+                String receipt = "PT-" + java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+                fineTransactionDAO.insert(borrowId, borrow.getReaderId(), fine, "CHARGE",
+                    "Overdue fine", user == null ? 0 : user.getId(),
+                    user == null ? "System" : user.getFullName(), receipt);
+            }
             bookDAO.updateAvailableCopies(borrow.getBookId(), +1); // tăng 1 bản
             conn.commit();
         } catch (Exception e) {
@@ -514,7 +528,7 @@ public class BorrowService {
             LocalDate due    = LocalDate.parse(dueDateStr,    DATE_FMT);
             LocalDate ret    = LocalDate.parse(returnDateStr, DATE_FMT);
             long overdueDays = ChronoUnit.DAYS.between(due, ret);
-            return overdueDays > 0 ? overdueDays * FINE_PER_DAY : 0.0;
+            return overdueDays > 0 ? overdueDays * getFinePerDay() : 0.0;
         } catch (Exception e) {
             return 0.0;
         }
@@ -525,5 +539,35 @@ public class BorrowService {
      */
     public double calculateCurrentFine(String dueDateStr) {
         return calculateFine(dueDateStr, LocalDate.now().format(DATE_FMT));
+    }
+
+    public int getBorrowDays() {
+        try { return settingDAO.getInt("library.borrow_days", DEFAULT_BORROW_DAYS); }
+        catch (SQLException e) { return DEFAULT_BORROW_DAYS; }
+    }
+
+    public int getMaxConcurrentBorrows() {
+        try { return settingDAO.getInt("library.max_borrows", MAX_CONCURRENT_BORROWS); }
+        catch (SQLException e) { return MAX_CONCURRENT_BORROWS; }
+    }
+
+    public double getFinePerDay() {
+        try { return settingDAO.getDouble("library.fine_per_day", FINE_PER_DAY); }
+        catch (SQLException e) { return FINE_PER_DAY; }
+    }
+
+    /** Ghi nhận thu phạt (CHARGE) hoặc miễn/giảm (WAIVE/ADJUST) và sinh số biên lai. */
+    public int recordFineTransaction(int borrowId, int readerId, double amount,
+                                     String type, String reason) throws SQLException {
+        if (amount <= 0) throw new IllegalArgumentException("Số tiền giao dịch phải lớn hơn 0.");
+        User user = AuthService.getCurrentUser();
+        String receipt = "PT-" + java.time.LocalDateTime.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        return fineTransactionDAO.insert(borrowId, readerId, amount, type, reason,
+            user == null ? 0 : user.getId(), user == null ? "System" : user.getFullName(), receipt);
+    }
+
+    public List<FineTransaction> getFineTransactions(int borrowId) throws SQLException {
+        return fineTransactionDAO.findByBorrow(borrowId);
     }
 }

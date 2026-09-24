@@ -120,7 +120,7 @@ public class CategoryDAO {
      */
     public int countBooksUsingCategory(String categoryName) throws SQLException {
         if (categoryName == null || categoryName.isBlank()) return 0;
-        String sql = "SELECT COUNT(*) FROM books WHERE LOWER(TRIM(category)) = LOWER(TRIM(?))";
+        String sql = "SELECT COUNT(*) FROM books WHERE deleted_at IS NULL AND LOWER(TRIM(category)) = LOWER(TRIM(?))";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, categoryName);
             ResultSet rs = ps.executeQuery();
