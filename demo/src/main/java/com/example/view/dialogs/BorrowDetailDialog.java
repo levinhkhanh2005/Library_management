@@ -203,6 +203,12 @@ public class BorrowDetailDialog extends JDialog {
         btnPdf.addActionListener(e -> doPdf());
         panel.add(btnPdf);
 
+        if (!borrow.isActive() && borrow.getFineAmount() > 0) {
+            JButton btnWaive = UITheme.createSecondaryButton("Miễn/Giảm phạt");
+            btnWaive.addActionListener(e -> doWaiveFine());
+            panel.add(btnWaive);
+        }
+
         JButton btnClose = UITheme.createSecondaryButton("Đóng");
         btnClose.addActionListener(e -> dispose());
         panel.add(btnClose);
@@ -230,6 +236,26 @@ public class BorrowDetailDialog extends JDialog {
             changed = true;
             UITheme.showSuccess(this, "Đã ghi nhận trả sách thành công!");
             dispose();
+        } catch (Exception ex) {
+            UITheme.showError(this, ex.getMessage());
+        }
+    }
+
+    private void doWaiveFine() {
+        String amountText = JOptionPane.showInputDialog(this,
+            "Số tiền miễn/giảm (tối đa " + UITheme.formatCurrency(borrow.getFineAmount()) + "):",
+            "Miễn/Giảm tiền phạt", JOptionPane.QUESTION_MESSAGE);
+        if (amountText == null || amountText.isBlank()) return;
+        String reason = JOptionPane.showInputDialog(this, "Lý do miễn/giảm:", "Lý do", JOptionPane.QUESTION_MESSAGE);
+        if (reason == null || reason.isBlank()) return;
+        try {
+            double amount = Double.parseDouble(amountText.replace(",", "").trim());
+            if (amount > borrow.getFineAmount()) throw new IllegalArgumentException("Số tiền không được vượt quá tiền phạt.");
+            borrowService.recordFineTransaction(borrow.getId(), borrow.getReaderId(), amount, "WAIVE", reason.trim());
+            changed = true;
+            UITheme.showSuccess(this, "Đã lưu giao dịch miễn/giảm phạt và biên lai.");
+        } catch (NumberFormatException ex) {
+            UITheme.showWarning(this, "Số tiền không hợp lệ.");
         } catch (Exception ex) {
             UITheme.showError(this, ex.getMessage());
         }

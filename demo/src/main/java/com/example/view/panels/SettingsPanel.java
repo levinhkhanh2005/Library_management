@@ -172,10 +172,52 @@ public class SettingsPanel extends JPanel implements MainFrame.Refreshable {
 
         col.add(buildChangePasswordCard());
         col.add(Box.createVerticalStrut(UITheme.PAD_MD));
+        col.add(buildLibraryPolicyCard());
+        col.add(Box.createVerticalStrut(UITheme.PAD_MD));
         col.add(buildSmtpConfigCard());
         col.add(Box.createVerticalStrut(UITheme.PAD_MD));
         col.add(buildSysInfoCard());
         return col;
+    }
+
+    private JPanel buildLibraryPolicyCard() {
+        JPanel card = createCard("⚙  Quy Định Thư Viện");
+        card.setLayout(new GridBagLayout());
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets = new Insets(5, 8, 5, 8);
+        g.fill = GridBagConstraints.HORIZONTAL;
+        g.weightx = 1.0;
+
+        JSpinner borrowDays = new JSpinner(new SpinnerNumberModel(14, 1, 365, 1));
+        JSpinner maxBorrows = new JSpinner(new SpinnerNumberModel(5, 1, 100, 1));
+        JSpinner finePerDay = new JSpinner(new SpinnerNumberModel(2000.0, 0.0, 100000000.0, 500.0));
+        SystemSettingDAO dao = new SystemSettingDAO();
+        try {
+            borrowDays.setValue(dao.getInt("library.borrow_days", 14));
+            maxBorrows.setValue(dao.getInt("library.max_borrows", 5));
+            finePerDay.setValue(dao.getDouble("library.fine_per_day", 2000.0));
+        } catch (Exception ignored) { }
+
+        g.gridy = 0; card.add(new JLabel("Thời hạn mượn (ngày)"), g);
+        g.gridy = 1; card.add(borrowDays, g);
+        g.gridy = 2; card.add(new JLabel("Số sách tối đa / độc giả"), g);
+        g.gridy = 3; card.add(maxBorrows, g);
+        g.gridy = 4; card.add(new JLabel("Mức phạt mỗi ngày (VNĐ)"), g);
+        g.gridy = 5; card.add(finePerDay, g);
+
+        JButton save = UITheme.createPrimaryButton("💾  Lưu quy định");
+        g.gridy = 6; g.insets = new Insets(10, 8, 6, 8); card.add(save, g);
+        save.addActionListener(e -> {
+            try {
+                dao.set("library.borrow_days", String.valueOf(borrowDays.getValue()));
+                dao.set("library.max_borrows", String.valueOf(maxBorrows.getValue()));
+                dao.set("library.fine_per_day", String.valueOf(finePerDay.getValue()));
+                UITheme.showSuccess(this, "Đã lưu quy định thư viện.");
+            } catch (Exception ex) {
+                UITheme.showError(this, "Không thể lưu quy định: " + ex.getMessage());
+            }
+        });
+        return card;
     }
 
     private JPanel buildChangePasswordCard() {

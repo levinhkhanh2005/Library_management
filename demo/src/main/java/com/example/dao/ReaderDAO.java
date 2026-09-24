@@ -78,7 +78,7 @@ public class ReaderDAO {
     // ===================== Xóa độc giả =====================
 
     public boolean delete(int id) throws SQLException {
-        String sql = "DELETE FROM readers WHERE id = ?";
+        String sql = "UPDATE readers SET deleted_at=datetime('now','localtime'), status='LOCKED' WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, id);
             return ps.executeUpdate() > 0;
@@ -89,7 +89,7 @@ public class ReaderDAO {
 
     /** Lấy toàn bộ danh sách độc giả, sắp xếp theo tên. */
     public List<Reader> findAll() throws SQLException {
-        String sql = "SELECT * FROM readers ORDER BY full_name";
+        String sql = "SELECT * FROM readers WHERE deleted_at IS NULL ORDER BY full_name";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return mapList(rs);
@@ -98,7 +98,7 @@ public class ReaderDAO {
 
     /** Tìm độc giả theo id. */
     public Reader findById(int id) throws SQLException {
-        String sql = "SELECT * FROM readers WHERE id = ?";
+        String sql = "SELECT * FROM readers WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setInt(1, id);
             ResultSet rs = ps.executeQuery();
@@ -108,7 +108,7 @@ public class ReaderDAO {
 
     /** Tìm độc giả theo mã thẻ. */
     public Reader findByCode(String code) throws SQLException {
-        String sql = "SELECT * FROM readers WHERE reader_code = ?";
+        String sql = "SELECT * FROM readers WHERE reader_code = ? AND deleted_at IS NULL";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, code);
             ResultSet rs = ps.executeQuery();
@@ -125,8 +125,8 @@ public class ReaderDAO {
         }
         String sql = """
                 SELECT * FROM readers
-                WHERE full_name   LIKE ? OR reader_code LIKE ?
-                   OR phone       LIKE ? OR email       LIKE ?
+                WHERE deleted_at IS NULL AND (full_name   LIKE ? OR reader_code LIKE ?
+                   OR phone       LIKE ? OR email       LIKE ?)
                 ORDER BY full_name
                 """;
         String like = "%" + keyword.trim() + "%";
@@ -138,7 +138,7 @@ public class ReaderDAO {
 
     /** Lấy danh sách độc giả theo trạng thái. */
     public List<Reader> findByStatus(Reader.Status status) throws SQLException {
-        String sql = "SELECT * FROM readers WHERE status = ? ORDER BY full_name";
+        String sql = "SELECT * FROM readers WHERE deleted_at IS NULL AND status = ? ORDER BY full_name";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, status.name());
             return mapList(ps.executeQuery());
@@ -147,7 +147,7 @@ public class ReaderDAO {
 
     /** Tổng số độc giả. */
     public int countAll() throws SQLException {
-        String sql = "SELECT COUNT(*) FROM readers";
+        String sql = "SELECT COUNT(*) FROM readers WHERE deleted_at IS NULL";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return rs.next() ? rs.getInt(1) : 0;
@@ -156,7 +156,7 @@ public class ReaderDAO {
 
     /** Số độc giả đang hoạt động. */
     public int countActive() throws SQLException {
-        String sql = "SELECT COUNT(*) FROM readers WHERE status = 'ACTIVE'";
+        String sql = "SELECT COUNT(*) FROM readers WHERE deleted_at IS NULL AND status = 'ACTIVE'";
         try (Statement stmt = getConn().createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             return rs.next() ? rs.getInt(1) : 0;
@@ -165,7 +165,7 @@ public class ReaderDAO {
 
     /** Đếm số độc giả theo trạng thái. */
     public int countByStatus(Reader.Status status) throws SQLException {
-        String sql = "SELECT COUNT(*) FROM readers WHERE status = ?";
+        String sql = "SELECT COUNT(*) FROM readers WHERE deleted_at IS NULL AND status = ?";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, status.name());
             ResultSet rs = ps.executeQuery();

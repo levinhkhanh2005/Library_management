@@ -199,7 +199,7 @@ public class AuthorDAO {
      */
     public int countBooksUsingAuthor(String authorName) throws SQLException {
         if (authorName == null || authorName.isBlank()) return 0;
-        String sql = "SELECT COUNT(*) FROM books WHERE LOWER(TRIM(author)) = LOWER(TRIM(?))";
+        String sql = "SELECT COUNT(*) FROM books WHERE deleted_at IS NULL AND LOWER(TRIM(author)) = LOWER(TRIM(?))";
         try (PreparedStatement ps = getConn().prepareStatement(sql)) {
             ps.setString(1, authorName);
             ResultSet rs = ps.executeQuery();

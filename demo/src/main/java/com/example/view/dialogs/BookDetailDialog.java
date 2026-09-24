@@ -158,6 +158,7 @@ public class BookDetailDialog extends JDialog {
 
         JButton btnImport = UITheme.createSecondaryButton("📥  Nhập Thêm Bản");
         JButton btnDiscard = UITheme.createSecondaryButton("📤  Thanh Lý Bản");
+        JButton btnHistory = UITheme.createSecondaryButton("🧾  Lịch Sử Kho");
         JButton btnClose = UITheme.createPrimaryButton("Đóng");
 
         btnImport.addActionListener(e -> {
@@ -172,10 +173,13 @@ public class BookDetailDialog extends JDialog {
             if (dlg.isSaved()) refreshData();
         });
 
+        btnHistory.addActionListener(e -> new InventoryHistoryDialog(this, book).setVisible(true));
+
         btnClose.addActionListener(e -> dispose());
 
         footer.add(btnImport);
         footer.add(btnDiscard);
+        footer.add(btnHistory);
         footer.add(btnClose);
         root.add(footer, BorderLayout.SOUTH);
     }

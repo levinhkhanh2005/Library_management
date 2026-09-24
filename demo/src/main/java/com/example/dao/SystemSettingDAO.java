@@ -42,6 +42,14 @@ public class SystemSettingDAO {
         }
     }
 
+    public int getInt(String key, int fallback) throws SQLException {
+        try { return Integer.parseInt(get(key)); } catch (Exception e) { return fallback; }
+    }
+
+    public double getDouble(String key, double fallback) throws SQLException {
+        try { return Double.parseDouble(get(key)); } catch (Exception e) { return fallback; }
+    }
+
     // ===================== Đọc/ghi EmailConfig =====================
 
     /** Đọc toàn bộ cấu hình SMTP thành đối tượng EmailConfig. */

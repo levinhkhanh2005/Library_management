@@ -184,9 +184,9 @@ public class PublisherDAO {
         if (publisherName == null || publisherName.isBlank()) return new ArrayList<>();
         String sql = """
                 SELECT * FROM books
-                WHERE LOWER(TRIM(publisher)) = LOWER(TRIM(?))
+                AND (LOWER(TRIM(publisher)) = LOWER(TRIM(?))
                    OR LOWER(TRIM('NXB ' || publisher)) = LOWER(TRIM(?))
-                   OR LOWER(TRIM(publisher)) = LOWER(TRIM(REPLACE(?, 'NXB ', '')))
+                   OR LOWER(TRIM(publisher)) = LOWER(TRIM(REPLACE(?, 'NXB ', ''))))
                 ORDER BY title
                 """;
         List<Book> list = new ArrayList<>();
@@ -220,6 +220,7 @@ public class PublisherDAO {
         if (publisherName == null || publisherName.isBlank()) return 0;
         String sql = """
                 SELECT COUNT(*) FROM books
+                WHERE deleted_at IS NULL
                 WHERE LOWER(TRIM(publisher)) = LOWER(TRIM(?))
                    OR LOWER(TRIM('NXB ' || publisher)) = LOWER(TRIM(?))
                    OR LOWER(TRIM(publisher)) = LOWER(TRIM(REPLACE(?, 'NXB ', '')))

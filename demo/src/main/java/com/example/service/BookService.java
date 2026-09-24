@@ -9,6 +9,9 @@ import com.example.model.Book;
 import com.example.model.Category;
 import com.example.model.CategoryBookStat;
 import com.example.model.Publisher;
+import com.example.model.User;
+import com.example.dao.InventoryLogDAO;
+import com.example.service.AuthService;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -24,6 +27,7 @@ public class BookService {
     private final CategoryDAO categoryDAO = new CategoryDAO();
     private final AuthorDAO authorDAO = new AuthorDAO();
     private final PublisherDAO publisherDAO = new PublisherDAO();
+    private final InventoryLogDAO inventoryLogDAO = new InventoryLogDAO();
 
     // ===================== Thêm sách =====================
 
@@ -138,6 +142,7 @@ public class BookService {
         if (!bookDAO.addCopies(bookId, additionalCopies)) {
             throw new SQLException("Nhập thêm bản sao thất bại.");
         }
+        logInventory(bookId, "IMPORT", additionalCopies, notes);
     }
 
     /**
@@ -165,6 +170,7 @@ public class BookService {
         if (!bookDAO.discardCopies(bookId, discardCopies)) {
             throw new SQLException("Thanh lý bản sao thất bại.");
         }
+        logInventory(bookId, "DISCARD", -discardCopies, reason);
     }
 
     // ===================== Xóa sách =====================
@@ -185,6 +191,16 @@ public class BookService {
     }
 
     // ===================== Truy vấn =====================
+
+    private void logInventory(int bookId, String action, int quantity, String reason) throws SQLException {
+        User user = AuthService.getCurrentUser();
+        inventoryLogDAO.insert(bookId, action, quantity, reason,
+            user == null ? 0 : user.getId(), user == null ? "System" : user.getFullName());
+    }
+
+    public List<com.example.model.InventoryLog> getInventoryHistory(int bookId) throws SQLException {
+        return inventoryLogDAO.findByBook(bookId);
+    }
 
     public List<Book> getAllBooks() throws SQLException {
         return bookDAO.findAll();

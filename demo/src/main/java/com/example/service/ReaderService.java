@@ -96,9 +96,11 @@ public class ReaderService {
         try {
             User u = userDAO.findByReaderId(reader.getId());
             if (u != null) {
-                userDAO.delete(u.getId());
+                userDAO.setActive(u.getId(), false);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            throw new SQLException("Reader archived but linked account could not be disabled.", e);
+        }
     }
 
     // ===================== Quản lý tài khoản đăng nhập độc giả =====================
